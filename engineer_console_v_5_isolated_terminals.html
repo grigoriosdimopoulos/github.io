@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>~/grigoris — console</title>
+  <meta name="color-scheme" content="dark light" />
+  <meta name="theme-color" content="#0a0f14" />
+  <style>
+    :root{ --bg:#0a0f14; --bg-2:#0f141a; --fg:#cde8cf; --fg-dim:#88a088; --accent:#38ef7d; --error:#ff6b6b; --window:#0b1219; --border:#1f2937; --shadow:0 20px 60px rgba(0,0,0,.5); }
+    @media (prefers-color-scheme: light){ :root{ --bg:#f2f7f3; --bg-2:#eaf1ed; --fg:#0f1a12; --fg-dim:#2b3a2e; --window:#ffffff; --border:#cbd5e1 } }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;color:var(--fg);background:
+      radial-gradient(1400px 800px at 50% -10%, #38ef7d14, transparent),
+      radial-gradient(1000px 600px at 120% 20%, #19a06b1a, transparent),
+      linear-gradient(180deg, var(--bg), var(--bg-2));
+      font:15px/1.55 "Lucida Console","Courier New",ui-monospace,Menlo,Consolas,monospace; overflow:hidden}
+    .panel{position:fixed; inset:auto 0 0 0; height:36px; background:linear-gradient(180deg,#0d151c,#0b1218); border-top:1px solid var(--border); display:flex; align-items:center; gap:8px; padding:0 10px; z-index:50}
+    .panel .dot{width:10px;height:10px;border-radius:50%;background:var(--accent); box-shadow:0 0 12px var(--accent)}
+    .panel .dock{display:flex; gap:6px; overflow-x:auto; scrollbar-width:none}
+    .panel .dock::-webkit-scrollbar{display:none}
+    .badge{padding:3px 8px; border:1px solid var(--border); border-radius:999px; color:var(--fg-dim); background:#0c141b; cursor:pointer}
+    .badge.min{opacity:.6}
+    #boot{position:fixed; inset:0; display:grid; place-items:center; z-index:100}
+    .crt{position:relative; width:min(920px,95vw); height:min(540px,70vh); background:#020507; border:1px solid #0b2513; border-radius:12px; box-shadow:var(--shadow), inset 0 0 60px #0a2013; overflow:hidden}
+    .crt::before{content:""; position:absolute; inset:0; background:repeating-linear-gradient(180deg,transparent 0 1px, rgba(26,255,90,.2) 2px 3px)}
+    .crt::after{content:""; position:absolute; inset:0; background:radial-gradient(60% 80% at 50% 20%, rgba(26,255,90,.05), transparent 60%)}
+    .bootlog{padding:18px; color:#b7ffcc; font-size:14px; white-space:pre-wrap; overflow:auto; height:100%}
+    #desktop{position:fixed; inset:0 0 36px 0; overflow:hidden}
+    .workspace{position:absolute; inset:0; padding:18px}
+    .win{position:absolute; background:linear-gradient(180deg,#0b141c,#091018); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow); color:var(--fg); min-width:320px; min-height:200px; overflow:hidden; transform:scale(.98); opacity:0; transition:transform .2s, opacity .2s}
+    .win.in{transform:scale(1); opacity:1}
+    .titlebar{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px; background:#0c151d; border-bottom:1px solid var(--border); cursor:move; user-select:none; -webkit-user-select:none; touch-action:none}
+    .controls{display:flex; gap:6px}
+    .btn{width:12px; height:12px; border-radius:50%; border:1px solid #1f2a33; cursor:pointer}
+    .btn.close{background:#ff5f56}.btn.min{background:#ffbd2e}.btn.max{background:#27c93f}
+    .title{font-weight:700; letter-spacing:.02em; color:var(--fg-dim)}
+    .content{padding:10px; background:conic-gradient(from .75turn,#09131a,#081018 30%,#070e15 60%,#0a141b); height:calc(100% - 34px); overflow:auto}
+    .term{font-size:14px; line-height:1.55; white-space:pre-wrap; user-select:none}
+    .cmd{user-select:text}
+    .term .line:not(:last-child) .cmd{pointer-events:none; user-select:none}
+    .line{position:relative}
+    .prompt{color:#a7f3d0}.path{color:#93c5fd}.cmd{color:#e5e7eb}
+    .out{color:#9ab4a0}.err{color:var(--error)}.hl{color:#e3ffa8}
+    .cursor{display:inline-block; width:9px; height:1.1em; background:#9cffaf; margin-left:2px; vertical-align:-2px; box-shadow:0 0 10px #38ef7d}
+    .term .line .cursor{opacity:.25}
+    .term .line:last-child .cursor{opacity:1; animation:blink 1s steps(1) infinite}
+    @keyframes blink{50%{opacity:0}}
+    .palette{position:fixed; left:50%; top:12%; transform:translateX(-50%); width:min(720px, 92vw); background:#0b1219; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); display:none; z-index:70}
+    .palette header{padding:10px 12px; border-bottom:1px solid var(--border)}
+    .palette input{width:100%; padding:10px 12px; border:0; outline:0; background:transparent; color:var(--fg); font:inherit}
+    .palette ul{list-style:none; margin:0; padding:8px}
+    .palette li{padding:10px 12px; border-radius:8px; cursor:pointer}
+    .palette li:hover{background:#0f1a23}
+    .alink{color:#7ee787; text-decoration:underline; text-decoration-style:dotted; cursor:pointer}
+    .toast{position:fixed; left:50%; bottom:54px; transform:translateX(-50%) translateY(10px); background:#0b161e; border:1px solid var(--border); padding:10px 14px; border-radius:10px; opacity:0; transition:opacity .2s, transform .2s; z-index:80}
+    .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .win.dragging{transition:none}
+/* Improve performance & safe area */
+.win{will-change:transform,left,top}
+.panel{height:calc(36px + env(safe-area-inset-bottom)); padding-bottom:env(safe-area-inset-bottom)}
+@media (max-width: 768px){ body{font-size:14px} .workspace{padding:6px} .badge{padding:6px 10px} .crt{width:95vw; height:60vh} .term{font-size:13px} .btn{width:14px;height:14px} }
+</style>
+</head>
+<body>
+  <div class="panel"><span class="dot"></span><span style="opacity:.7">console@grigoris:~</span><div class="dock" id="dock"></div><div style="margin-left:auto; opacity:.6" id="clock"></div></div>
+  <div id="boot"><div class="crt"><div class="bootlog" id="bootlog"></div></div></div>
+  <div id="desktop"><div class="workspace" id="space"></div></div>
+  <div class="palette" id="palette"><header><input id="palInput" placeholder="Type a command… (whoami, experience, role #|query, contact, newterm, ls, history, neofetch, commands)" /></header><ul id="palList"></ul></div>
+  <div class="toast" id="toast">Copied</div>
+
+<script>
+/* Boot */
+const bootlog=document.getElementById('bootlog');
+const bootLines=['[ OK ] BIOS vendor → OpenAI-VIRT','[ OK ] Initializing CPU cores (8) — turbo boost enabled','[ OK ] Loading kernel 6.6.13-grigoris…','[ OK ] Mounting / (btrfs, rw, noatime)','[ OK ] Starting network manager — 10.0.0.42','[ OK ] Starting sshd','[ OK ] Importing dotfiles','[ OK ] Spawning TTY1','login: grigoris','Password: ••••••••','Last login: '+new Date().toString(),'','Welcome. Type "help" or press "/" for the command palette.'];
+const typeLine=(t,ms=24)=>new Promise(res=>{let i=0;const id=setInterval(()=>{bootlog.innerHTML+=t.slice(i,i+2);i+=2;if(i>=t.length){clearInterval(id);bootlog.innerHTML+='\n';bootlog.scrollTop=bootlog.scrollHeight;res();}},ms)});
+(async()=>{for(const l of bootLines){await typeLine(l+'\n');}await new Promise(r=>setTimeout(r,300));document.getElementById('boot').style.display='none';openTerminal();})();
+
+/* Window manager */
+const space=document.getElementById('space'); const dock=document.getElementById('dock'); let z=1;
+function mkWin({title,id,x=40,y=30,w=820,h=460,content=''}){
+  const el=document.createElement('div'); el.className='win'; el.style.left=x+'px'; el.style.top=y+'px'; el.style.width=w+'px'; el.style.height=h+'px'; el.dataset.id=id;
+  el.innerHTML=`<div class="titlebar"><div class="controls"><div class="btn close" title="Close"></div><div class="btn min" title="Minimize"></div><div class="btn max" title="Maximize"></div></div><div class="title">${title}</div></div><div class="content">${content}</div>`;
+  space.appendChild(el); requestAnimationFrame(()=>el.classList.add('in'));
+
+  const isMobile = matchMedia('(max-width: 768px)').matches;
+  if(isMobile){
+    el.style.left = '6px'; el.style.top = '6px';
+    el.style.width = `calc(100vw - 12px)`;
+    el.style.height = `calc(100dvh - 12px - ${getPanelH()}px)`;
+  }
+
+  const bar=el.querySelector('.titlebar'); let start=null; let dragging=false; let maximized=false; let prevRect=null;
+  const bounds=()=>({ maxX: innerWidth - el.offsetWidth, maxY: innerHeight - getPanelH() - el.offsetHeight });
+  const snap=v=>{ const g=8; return Math.round(v/g)*g; };
+
+  // --- Drag logic with reliable end on pointer release ---
+  bar.addEventListener('pointerdown',e=>{
+    if(e.target.closest('.btn')) return;
+    bringToFront(el); setActiveByWin(el);
+    start={x:e.clientX, y:e.clientY, left:el.offsetLeft, top:el.offsetTop};
+    el.setPointerCapture(e.pointerId); // capture on window
+    el.classList.add('dragging');
+  });
+  // Move & end events bound on the captured element (the window), so release anywhere stops drag
+  el.addEventListener('pointermove',e=>{
+    if(!start) return;
+    const dx=e.clientX - start.x, dy=e.clientY - start.y;
+    if(!dragging && (Math.abs(dx)>3 || Math.abs(dy)>3)) dragging=true;
+    if(!dragging) return;
+    const b=bounds();
+    const nx = snap(Math.max(0, Math.min(b.maxX, start.left + dx)));
+    const ny = snap(Math.max(0, Math.min(b.maxY, start.top + dy)));
+    el.style.left = nx+'px'; el.style.top = ny+'px';
+  });
+  const endDrag=()=>{ start=null; dragging=false; el.classList.remove('dragging'); };
+  el.addEventListener('pointerup', endDrag);
+  el.addEventListener('pointercancel', endDrag);
+  el.addEventListener('lostpointercapture', endDrag);
+  bar.addEventListener('dblclick',()=> toggleMax());
+
+  function toggleMax(){
+    if(!maximized){
+      prevRect={left:el.style.left, top:el.style.top, width:el.style.width, height:el.style.height};
+      el.style.left='6px'; el.style.top='6px'; el.style.width=(innerWidth-12)+'px'; el.style.height=(innerHeight-12-getPanelH())+'px';
+      maximized=true;
+    } else {
+      if(prevRect){ el.style.left=prevRect.left; el.style.top=prevRect.top; el.style.width=prevRect.width; el.style.height=prevRect.height; }
+      maximized=false;
+    }
+  }
+
+  const close=()=>{ el.remove(); dock.querySelector(`[data-id="${id}"]`)?.remove(); TERMINALS.delete(id); if(activeTermId===id) activeTermId=[...TERMINALS.keys()].pop()||null; };
+  const min =()=>{ el.style.display='none'; badge.classList.add('min'); };
+  const max =()=> toggleMax();
+
+  el.querySelector('.btn.close').onclick=close;
+  el.querySelector('.btn.min').onclick=min;
+  el.querySelector('.btn.max').onclick=max;
+
+  el.addEventListener('mousedown',()=>{ bringToFront(el); setActiveByWin(el); });
+
+  const badge=document.createElement('span'); badge.className='badge'; badge.textContent=title; badge.dataset.id=id; badge.onclick=()=>{ el.style.display=(getComputedStyle(el).display==='none')?'block':'none'; bringToFront(el); badge.classList.toggle('min'); setActiveByWin(el); };
+  dock.appendChild(badge);
+  bringToFront(el);
+  fitInsideViewport(el);
+  return el;
+}
+function getPanelH(){ const p=document.querySelector('.panel'); return p? p.getBoundingClientRect().height : 36; }
+function fitInsideViewport(win){ const b={ maxX: innerWidth - win.offsetWidth, maxY: innerHeight - getPanelH() - win.offsetHeight }; win.style.left = Math.max(0, Math.min(b.maxX, win.offsetLeft))+'px'; win.style.top = Math.max(0, Math.min(b.maxY, win.offsetTop))+'px'; }
+window.addEventListener('resize', ()=>{ document.querySelectorAll('.win').forEach(fitInsideViewport); });
+function getPanelH(){ const p=document.querySelector('.panel'); return p? p.getBoundingClientRect().height : 36; }
+function fitInsideViewport(win){ const b={ maxX: innerWidth - win.offsetWidth, maxY: innerHeight - getPanelH() - win.offsetHeight }; win.style.left = Math.max(0, Math.min(b.maxX, win.offsetLeft))+'px'; win.style.top = Math.max(0, Math.min(b.maxY, win.offsetTop))+'px'; }
+window.addEventListener('resize', ()=>{ document.querySelectorAll('.win').forEach(fitInsideViewport); });
+function bringToFront(w){ w.style.zIndex=++z; }
+
+/* Data */
+const POSTS=[]; // blog removed
+const ROLES=[
+  {company:'Kaizen Gaming', title:'Team Lead', period:'2024—Now', loc:'Athens / Remote', details:['Leading a backend squad working on sportsbook services (.NET/Java).','Hands-on with Kafka, Postgres/Timescale, Kubernetes.','Focus: reliability, incident response, keeping things simple.']},
+  {company:'Datawise', title:'Lead / Software Engineer', period:'2022—2024', loc:'Remote', details:['E‑commerce platform work with Spring Boot and AWS.','Cut sync issues, improved performance and deployment flow.','Mentored engineers and reviewed code.']},
+  {company:'Tymit', title:'Lead Software Engineer', period:'2020—2021', loc:'Remote (London)', details:['Credit-card app backend in Java/Spring.','Worked on AWS infra and monitoring.']},
+  {company:'Samsung Developers', title:'Software Engineer', period:'2020—2021', loc:'Athens', details:['Shipped Galaxy Watch apps using Samsung JS framework.','Maintained a small portfolio with good ratings.']},
+  {company:'XM', title:'Software Engineer', period:'2020', loc:'Athens', details:['Trading platform services (Java 11, Spring Boot).','Looked at concurrency and performance; AWS/Docker.']},
+  {company:'Camelot Lottery Solutions', title:'Software Engineer', period:'2017—2020', loc:'Athens', details:['UK National Lottery backend (Java/Spring).','Security, stability, and mentoring juniors.']},
+  {company:'CERN', title:'Software Engineer', period:'2016—2017', loc:'Geneva', details:['Raisin/Sailor apps (Java, Spring, PL/SQL, PrimeFaces).','Radiation monitoring and incident reporting tools.']},
+  {company:'Agile Actors', title:'Software Engineer', period:'2016', loc:'Athens', details:['Lottery modules: auth, profiles, verification.','Java, Groovy, Cassandra, Agile.']},
+  {company:'GNT Information Systems', title:'Software Engineer', period:'2015—2016', loc:'Athens', details:['Liferay portal and Android/Ionic app work.']},
+  {company:'NCSR Demokritos', title:'Student Researcher', period:'2015—2017', loc:'Athens', details:['Built TAC ad-auctions agent (Java/Spring).','Placed first; implemented and evaluated strategies.']},
+  {company:'Baeldung', title:'Technical Author', period:'2018—2019', loc:'Athens', details:['Wrote focused articles on Java/Spring/REST.']},
+  {company:'Agile Actors #learning', title:'Software Instructor', period:'2018—2020', loc:'Athens', details:['Taught Java + Spring Boot, labs and projects.']},
+  {company:'Ouroboros Office', title:'Co‑Founder', period:'2019—2020', loc:'Athens', details:['Small web dev studio. Spring Boot + Angular projects.']},
+  {company:'NKUA', title:'Course Assistant', period:'2019', loc:'Athens', details:['Helped with programming/data structures labs and grading.']}
+];
+function resolveRole(q){ if(!q) return null; const s=String(q).trim(); const byIndex=/^\d+$/.test(s); if(byIndex){ const i=Number(s)-1; return ROLES[i]||null; } const idx=ROLES.findIndex(r=> r.company.toLowerCase().includes(s.toLowerCase()) || r.title.toLowerCase().includes(s.toLowerCase())); return idx>-1? ROLES[idx] : null; }
+
+/* Terminal (multi-instance, isolated state) */
+const TERMINALS=new Map(); let activeTermId=null; const USER={ email: localStorage.getItem('contactEmail') || 'grigoris@example.com' };
+class Terminal {
+  constructor(winEl){ this.winEl=winEl; this.term=winEl.querySelector('.term'); this.history=[]; this.hIdx=0; this.FORM=null; this.CWD='/home/grigoris'; this.bootPrompt(); this.winEl.addEventListener('mousedown',()=>setActiveByWin(this.winEl)); }
+  newLine(){ const d=document.createElement('div'); d.className='line'; this.term.appendChild(d); return d; }
+  prompt(){ this.term.querySelectorAll('.cursor').forEach(c=>c.remove()); this.term.querySelectorAll('.cmd').forEach(el=>{ el.removeAttribute('id'); el.setAttribute('contenteditable','false'); el.setAttribute('tabindex','-1'); el.classList.add('readonly'); }); const line=this.newLine(); line.innerHTML=`<span class='prompt'>grigoris@console</span>:<span class='path'>${this.CWD}</span>$ <span class='cmd' id='cmd' contenteditable="true" spellcheck="false"></span><span class='cursor'></span>`; this.term.scrollTop=this.term.scrollHeight; const el=line.querySelector('#cmd'); el.focus(); return el; }
+  focusCmd(){ let el=this.winEl.querySelector('#cmd'); if(!el){ el=this.prompt(); } el.focus(); this.placeCaretAtEnd(el); return el; }
+  insertAtCursor(text){ const el=this.focusCmd(); const sel=window.getSelection(); const r=sel.getRangeAt(0); r.deleteContents(); r.insertNode(document.createTextNode(text)); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); }
+  print(s,cls='out'){ const d=this.newLine(); d.className='line '+cls; d.innerHTML=s; this.term.scrollTop=this.term.scrollHeight; }
+  type(text,speed=12){ return new Promise(res=>{ const c=this.prompt(); let i=0; const id=setInterval(()=>{ c.textContent+=text[i++]||''; if(i>text.length){ clearInterval(id); res(); } this.term.scrollTop=this.term.scrollHeight; },speed); }); }
+  async run(text){ this.history.push(text); this.hIdx=this.history.length; await this.type(text); await this.exec(text); }
+  bootPrompt(){ this.print('Type <span class="hl">help</span> or press <span class="hl">/</span> for the palette. Click green text to auto-type.'); this.print(`Available: <span class='alink' data-cmd='whoami'>whoami</span> · <span class='alink' data-cmd='experience'>experience</span> · <span class='alink' data-cmd='contact'>contact</span> · <span class='alink' data-cmd='newterm'>newterm</span>`); this.prompt(); }
+  showRole(arg){ if(!arg){ this.print("\n<strong>Experience</strong>"); ROLES.forEach((r,i)=> this.print('<div>[<span class=\'alink\' data-cmd=\'role '+(i+1)+'\'>'+(i+1)+'</span>] <span class=\'alink\' data-cmd=\'role '+(i+1)+'\'><strong>'+r.title+'</strong> · '+r.company+'</span> — <span style=\'opacity:.7\'>'+r.period+'</span></div>')); this.print('<div>Click a line or use <span class=\'hl\'>role 1</span> / <span class=\'hl\'>exp Kaizen</span> to read details.</div>'); } else { const r=resolveRole(arg); if(!r){ this.print('role not found','err'); return; } this.print('<div class=\'out\'><h3>'+r.title+' · '+r.company+'</h3><div style=\'opacity:.8\'>'+r.period+' · '+r.loc+'</div><ul>'+r.details.map(d=>'<li>'+d+'</li>').join('')+'</ul></div>'); } }
+  contact(){ this.FORM={step:0, data:{name:'', email:'', subject:'', message:''}, fields:['name','email','subject','message']}; this.print("\n<strong>Contact</strong>"); this.print('We\'ll send an email to <span class=\'hl\'>'+USER.email+'</span>. Change with <span class=\'hl\'>set email you@domain.com</span>.'); this.print('Enter your <strong>name</strong>:'); }
+  async exec(input){ const raw=(input||'').trim(); if(this.FORM){ const f=this.FORM.fields[this.FORM.step]; this.FORM.data[f]=raw; this.FORM.step++; if(this.FORM.step<this.FORM.fields.length){ this.print('Enter your <strong>'+this.FORM.fields[this.FORM.step]+'</strong>:'); } else { const {name,email,subject,message}=this.FORM.data; const body='From: '+name+' <'+email+">\n\n"+message; mailto({to:USER.email, subject, body}); this.print('opening mail client…'); this.FORM=null; } this.prompt(); return; } const parts=raw.split(/\s+/); const cmd=parts[0]||''; const argStr=raw.slice(cmd.length).trim(); switch(cmd){ case 'newterm': case 'tty': case 'terminal': case 'new': case 'tab': { openTerminal(); break; } case 'commands': case 'man': { this.print(`<div class='out'><strong>Commands & easter eggs</strong>\n      <ul>\n        <li><code>whoami</code> — bio</li>\n        <li><code>experience</code> / <code>exp</code> / <code>role</code> / <code>roles</code> / <code>work</code> / <code>jobs</code> / <code>job</code> / <code>description</code> / <code>desc</code> / <code>jd</code> — list or details</li>\n        <li><code>read #|\"query\"</code> — show role details</li>\n        <li><code>contact</code> — guided form; <code>set email you@domain.com</code></li>\n        <li><code>newterm</code> / <code>tty</code> — open a new terminal window</li>\n        <li><code>open &lt;url|linkedin|cv&gt;</code></li>\n        <li><code>ls</code>, <code>pwd</code>, <code>cd</code>, <code>clear</code>, <code>history</code></li>\n        <li><code>uname -a</code>, <code>neofetch</code>, <code>date</code>, <code>reboot</code>, <code>sudo</code></li>\n        <li><code>selftest</code> — run built-in tests</li>\n      </ul>\n      <div style='opacity:.8'>Tip: click any <span class='hl'>green</span> text to auto-type the command.</div>\n      </div>`); break; } case 'help': this.print('Commands: <span class="hl">whoami</span>, <span class="hl">experience</span> [query|#], <span class="hl">exp</span> [query|#], <span class="hl">role</span> [#|query], <span class="hl">contact</span>, <span class="hl">newterm</span>, <span class="hl">open</span> &lt;url|alias&gt;, <span class="hl">ls</span>, <span class="hl">pwd</span>, <span class="hl">cd</span>, <span class="hl">clear</span>, <span class="hl">history</span>, <span class="hl">uname -a</span>, <span class="hl">neofetch</span>, <span class="hl">date</span>, <span class="hl">reboot</span>, <span class="hl">sudo</span>, <span class="hl">commands</span>'); break; case 'clear': this.term.innerHTML=''; break; case 'experience': this.showRole(argStr); break; case 'exp': this.showRole(argStr); break; case 'role': this.showRole(argStr); break; case 'roles': this.showRole(argStr); break; case 'work': this.showRole(argStr); break; case 'jobs': this.showRole(argStr); break; case 'job': this.showRole(argStr); break; case 'description': this.showRole(argStr); break; case 'desc': this.showRole(argStr); break; case 'jd': this.showRole(argStr); break; case 'contact': this.contact(); break; case 'set': { const [what,value]=argStr.split(/\s+/,2); if(what==='email' && value){ USER.email=value; localStorage.setItem('contactEmail', value); this.print('email set to '+value); } else { this.print('usage: set email you@domain.com','err'); } break; } case 'email': { const m = argStr.match(/^\"([^\"]*)\"\s+\"([\s\S]*)\"$/); if(!m){ this.print('usage: email \"Subject\" \"Body\"','err'); break; } mailto({to:USER.email, subject:m[1], body:m[2]}); this.print('opening mail client…'); break; } case 'message': { if(!argStr){ this.print('usage: message \"your text\"','err'); break; } mailto({to:USER.email, subject:'Website Contact', body: argStr.replace(/^\"|\"$/g,'')}); this.print('opening mail client…'); break; } case 'open': { if(!argStr){ this.print('usage: open <url|alias>','err'); break; } const aliases={ linkedin:'https://www.linkedin.com/in/grigoris-dimopoulos-892633bb', cv:'/cv.pdf' }; const target=aliases[argStr.toLowerCase()]||argStr; window.open(target,'_blank','noopener'); this.print('opening '+target+' ...'); break; } case 'read': { const q=argStr.replace(/^\"|\"$/g,''); const r=resolveRole(q); if(r){ this.print('<div class=\'out\'><h3>'+r.title+' · '+r.company+'</h3><div style=\'opacity:.8\'>'+r.period+' · '+r.loc+'</div><ul>'+r.details.map(d=>'<li>'+d+'</li>').join('')+'</ul></div>'); } else { this.print('not found','err'); } break; } case 'whoami': this.print('<div class=\'out\'><strong>Grigoris Dimopoulos</strong><br/>Backend engineer / team lead in Athens. I build and keep backend services fast and reliable.<ul><li><strong>Stacks:</strong> Java/Spring, .NET, Kafka, PostgreSQL/Timescale, Kubernetes, AWS.</li><li><strong>Work:</strong> sportsbook microservices, e‑commerce platforms, payments/credit, lottery systems, CERN internal tools.</li><li><strong>I care about:</strong> simple designs, good observability, clear SLOs, steady delivery, mentoring.</li><li><strong>Interests:</strong> performance work, incident response, dev tooling, clean APIs.</li></ul></div>'); break; case 'ls': { const files=['README.md','experience','contact','cv.pdf']; this.print(files.join('  ')); break; } case 'pwd': this.print(this.CWD); break; case 'cd': { const dest=argStr||'/home/grigoris'; this.CWD=dest; break; } case 'history': { this.history.forEach((h,i)=>this.print((i+1)+'  '+h)); break; } case 'uname': { if(argStr==='-a'){ this.print('Linux console 6.6.13-grigoris #1 SMP PREEMPT x86_64 GNU/Linux'); } else { this.print('Linux'); } break; } case 'neofetch': { this.print('<pre>grigoris@console\n-----------\nOS: consoleOS 1.0\nKernel: 6.6.13-grigoris\nUptime: '+Math.floor(performance.now()/1000)+'s\nShell: web-term\nCPU: 8-core (virt)\nMemory: ok\n</pre>'); break; } case 'date': this.print(new Date().toString()); break; case 'reboot': location.reload(); break; case 'sudo': this.print('Nice try. This is a demo shell.'); break; case 'selftest': { runSelfTests(this); break; } default: if(cmd) this.print('command not found: '+cmd,'err'); } this.prompt(); }
+  placeCaretAtEnd(el){ const r=document.createRange(); r.selectNodeContents(el); r.collapse(false); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+}
+
+/* Terminal factory and focus */
+let TERM_COUNT=0; // FIX: removed duplicate declarations of TERMINALS/activeTermId
+function openTerminal(label){ TERM_COUNT++; const id='terminal-'+TERM_COUNT; const el=mkWin({title:(label||(`Terminal — TTY${TERM_COUNT}`)),id,content:`<div class='term'></div>`}); const t=new Terminal(el); TERMINALS.set(id,t); activeTermId=id; return t; }
+function setActiveByWin(winEl){ for(const [id,inst] of TERMINALS){ if(inst.winEl===winEl){ activeTermId=id; break; } } }
+function getActive(){ return activeTermId? TERMINALS.get(activeTermId) : null; }
+
+/* Helpers */
+function mailto({to, subject, body}){ const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; location.href = url; }
+
+/* Interactions */
+document.addEventListener('click',e=>{ const a=e.target.closest('.alink'); if(!a) return; const termWin=e.target.closest('.win'); const targetInst=[...TERMINALS.values()].find(t=>t.winEl===termWin) || getActive(); const c=a.dataset.cmd; e.preventDefault(); targetInst && targetInst.run(c); });
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='/' && !e.ctrlKey && !e.metaKey && document.activeElement!==palInput){ e.preventDefault(); togglePalette(true); return; }
+  const t=getActive(); if(!t) return; const cmdEl=t.winEl.querySelector('#cmd');
+  if(document.activeElement!==cmdEl && document.activeElement!==palInput && !e.metaKey && !e.ctrlKey){ if(e.key.length===1){ e.preventDefault(); t.insertAtCursor(e.key); return; } if(['Backspace','Delete','ArrowLeft','ArrowRight','Home','End'].includes(e.key)){ e.preventDefault(); t.focusCmd(); return; } }
+  if(!cmdEl || e.metaKey || e.ctrlKey) return;
+  if(e.key==='Enter'){ e.preventDefault(); const v=cmdEl.textContent.trim(); if(v){ t.history.push(v); t.hIdx=t.history.length; } t.exec(v); cmdEl.parentElement.remove(); return; }
+  if(e.key==='ArrowUp'){ e.preventDefault(); if(t.history.length===0) return; if(t.hIdx===t.history.length) t.hIdx=t.history.length-1; else t.hIdx=Math.max(0,t.hIdx-1); cmdEl.textContent=t.history[t.hIdx]||''; t.placeCaretAtEnd(cmdEl); return; }
+  if(e.key==='ArrowDown'){ e.preventDefault(); if(t.history.length===0) return; t.hIdx=Math.min(t.history.length,t.hIdx+1); cmdEl.textContent=(t.hIdx===t.history.length)? '' : (t.history[t.hIdx]||''); t.placeCaretAtEnd(cmdEl); return; }
+});
+
+document.addEventListener('selectionchange',()=>{ const t=getActive(); if(!t) return; const cmdEl=t.winEl.querySelector('#cmd'); if(!cmdEl) return; const sel=window.getSelection(); if(!sel.rangeCount) return; if(!cmdEl.contains(sel.anchorNode)) { t.focusCmd(); } });
+
+document.addEventListener('mousedown',e=>{ if(e.target.closest('.alink')|| e.target.closest('#palette')) return; const termWin=e.target.closest('.win'); if(termWin && TERMINALS.size){ setActiveByWin(termWin); const t=getActive(); if(e.target.closest('.term')){ e.preventDefault(); t && t.focusCmd(); } }});
+
+document.addEventListener('paste',e=>{ const t=getActive(); if(!t) return; const cmdEl=t.winEl.querySelector('#cmd'); if(!cmdEl) return; const txt=(e.clipboardData||window.clipboardData).getData('text'); document.execCommand('insertText', false, txt); e.preventDefault(); });
+
+/* Palette */
+const palette=document.getElementById('palette'); const palInput=document.getElementById('palInput'); const palList=document.getElementById('palList'); const COMMANDS=['whoami','experience','role 1','contact','newterm','set email you@domain.com','open linkedin','open cv','help','commands','selftest','clear','history','ls','pwd','uname -a','neofetch','date','reboot'];
+function togglePalette(on){ palette.style.display=on?'block':'none'; if(on){ palInput.value=''; buildPal(''); palInput.focus(); } }
+function buildPal(q){ palList.innerHTML=COMMANDS.filter(c=>c.toLowerCase().includes(q.toLowerCase())).map(c=>`<li data-cmd="${c}">${c}</li>`).join(''); }
+palInput.addEventListener('input',e=>buildPal(e.target.value));
+palette.addEventListener('click',e=>{ const li=e.target.closest('li'); if(!li) return; togglePalette(false); const t=getActive(); t && t.run(li.dataset.cmd); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') togglePalette(false); });
+
+/* Clock + toast */
+const clock=document.getElementById('clock'); setInterval(()=>clock.textContent=new Date().toLocaleTimeString(),1000);
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1500); }
+
+/* Tests */
+function runSelfTests(inst){ const results=[]; const ok=(name,cond)=>results.push({name,pass:!!cond});
+  // Existing tests
+  ok('resolveRole by index', resolveRole('1')===ROLES[0]);
+  ok('resolveRole by name', (resolveRole('Kaizen Gaming')||{}).company==='Kaizen Gaming');
+  ok('mailto builds url', (function(){ const to='a@b.com', s='S', b='B'; const u=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(s)}&body=${encodeURIComponent(b)}`; return typeof u==='string' && u.startsWith('mailto:'); })());
+  // New tests (non-invasive)
+  ok('TERMINALS is Map', TERMINALS instanceof Map);
+  ok('COMMANDS contains uname -a', Array.isArray(COMMANDS) && COMMANDS.includes('uname -a'));
+  ok('openTerminal registers new terminal', (function(){ const before=TERMINALS.size; const t=openTerminal('TTY-test'); return TERMINALS.size===before+1 && !!t; })());
+  ok('activeTermId points to existing terminal', activeTermId==null || TERMINALS.has(activeTermId));
+
+  console.group('[selftest]'); results.forEach(r=>console.log(r.pass?'✔':'✘', r.name)); console.groupEnd();
+  (inst||getActive()).print('<strong>Self test</strong>'); results.forEach(r=> (inst||getActive()).print((r.pass?'✔':'✘')+' '+r.name));
+}
+</script>
+</body>
+</html>
