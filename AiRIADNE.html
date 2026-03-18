@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne — AI Production Support</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --canvas:#f0ede8;--dot:#d6d2cc;
+  --yellow:#ffe566;--yt:#3d3000;--yd:#b8a000;
+  --blue:#b3d4ff;--bt:#0a2a5e;--bd:#3a7bd5;
+  --green:#b8f0c8;--gt:#0a3320;--gd:#2a9e50;
+  --pink:#ffb3d9;--pt:#4a0025;--pd:#d4367a;
+  --orange:#ffd0a0;--ot:#3d1a00;--od:#e07020;
+  --purple:#d4b8ff;--ppt:#2a0060;--ppd:#7c3aed;
+  --white:#ffffff;
+  --sh:0 2px 8px rgba(0,0,0,0.10),0 1px 3px rgba(0,0,0,0.07);
+  --sh2:0 6px 20px rgba(0,0,0,0.14),0 2px 6px rgba(0,0,0,0.09);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background-color:var(--canvas);background-image:radial-gradient(var(--dot) 1px,transparent 1px);background-size:24px 24px;font-family:'Nunito Sans',sans-serif;font-size:14px;line-height:1.6;min-height:100vh;}
+
+.board{max-width:1120px;margin:0 auto;padding:36px 28px 100px;}
+
+/* Header */
+.hdr{background:var(--white);border-radius:14px;padding:24px 32px;margin-bottom:32px;box-shadow:var(--sh);border:1.5px solid #e0dbd4;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;}
+.hdr-left h1{font-family:'Nunito',sans-serif;font-size:22px;font-weight:900;color:#1a1a1a;letter-spacing:-.3px;margin-bottom:3px;}
+.hdr-left p{font-size:13px;color:#888;}
+.hpills{display:flex;gap:7px;flex-wrap:wrap;}
+.pill{font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;padding:4px 11px;border-radius:20px;}
+.py{background:var(--yellow);color:var(--yt);}
+.pb{background:var(--blue);color:var(--bt);}
+.pg{background:var(--green);color:var(--gt);}
+
+/* Nav */
+.nav{display:flex;gap:6px;margin-bottom:26px;flex-wrap:wrap;}
+.ntab{font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;padding:7px 18px;border-radius:20px;border:2px solid #d6d2cc;background:var(--white);color:#888;cursor:pointer;transition:all .15s;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.ntab:hover{border-color:#aaa;color:#1a1a1a;}
+.ntab.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a;}
+.ntab-secret{background:#fff8e6;border-color:#ffd0a0;color:#8a4400;}
+.ntab-secret:hover{background:#fff0cc;border-color:#e07020;}
+.ntab-secret.on{background:#e07020;color:#fff;border-color:#e07020;}
+.view{display:none;}.view.on{display:block;}
+
+/* Section label */
+.slabel{font-family:'Nunito',sans-serif;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#aaa;margin-bottom:10px;padding-left:2px;}
+
+/* Layout */
+.row{display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;}
+.col{display:flex;flex-direction:column;gap:14px;}
+hr.div{border:none;border-top:2px dashed #d6d2cc;margin:24px 0;}
+
+/* Sticky */
+.s{border-radius:6px;padding:16px 18px;box-shadow:var(--sh);transition:transform .15s,box-shadow .15s;position:relative;}
+.s:hover{transform:translateY(-2px) rotate(.25deg);box-shadow:var(--sh2);}
+.tape{position:absolute;top:-7px;left:50%;transform:translateX(-50%);width:36px;height:14px;background:rgba(255,255,255,.55);border-radius:2px;border:1px solid rgba(0,0,0,.07);}
+.sy{background:var(--yellow);}  .sy .st{color:var(--yt);}  .sy .sb{color:#5a4800;}
+.sbl{background:var(--blue);}   .sbl .st{color:var(--bt);} .sbl .sb{color:#1a3a6e;}
+.sg{background:var(--green);}   .sg .st{color:var(--gt);}  .sg .sb{color:#1a4a2e;}
+.sp{background:var(--pink);}    .sp .st{color:var(--pt);}  .sp .sb{color:#5a1035;}
+.so{background:var(--orange);}  .so .st{color:var(--ot);}  .so .sb{color:#5a2a00;}
+.spu{background:var(--purple);} .spu .st{color:var(--ppt)}.spu .sb{color:#3a0070;}
+.sw{background:var(--white);border:1.5px solid #e5e2dc;} .sw .st{color:#1a1a1a;} .sw .sb{color:#555;}
+.st{font-family:'Nunito',sans-serif;font-size:13px;font-weight:900;margin-bottom:6px;line-height:1.3;}
+.sb{font-size:12px;line-height:1.6;}
+.s-sm{flex:1;min-width:160px;max-width:220px;}
+.s-md{flex:1;min-width:200px;max-width:280px;}
+.s-lg{flex:1;min-width:260px;}
+.s-full{width:100%;}
+
+/* Card */
+.card{background:var(--white);border-radius:10px;padding:18px 22px;box-shadow:var(--sh);border:1.5px solid #e0dbd4;transition:transform .15s,box-shadow .15s;}
+.card:hover{transform:translateY(-2px);box-shadow:var(--sh2);}
+.card-t{font-family:'Nunito',sans-serif;font-size:14px;font-weight:900;color:#1a1a1a;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+.card-b{font-size:13px;color:#555;line-height:1.65;}
+
+/* Number badge */
+.num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Nunito',sans-serif;font-size:11px;font-weight:900;flex-shrink:0;}
+.ny{background:var(--yellow);color:var(--yt);}
+.nb{background:var(--blue);color:var(--bt);}
+.ng{background:var(--green);color:var(--gt);}
+.np{background:var(--pink);color:var(--pt);}
+.no{background:var(--orange);color:var(--ot);}
+
+/* Flow */
+.flow{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow-x:auto;padding:4px 2px;}
+.fn{flex-shrink:0;padding:12px 16px;border-radius:9px;font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;text-align:center;min-width:110px;box-shadow:var(--sh);}
+.fa{font-size:16px;color:#bbb;padding:0 4px;flex-shrink:0;}
+.fn-pu{background:var(--purple);color:var(--ppt);}
+.fn-g{background:var(--green);color:var(--gt);}
+.fn-y{background:var(--yellow);color:var(--yt);}
+.fn-o{background:var(--orange);color:var(--ot);}
+.fn-b{background:var(--blue);color:var(--bt);}
+
+/* Highlight box */
+.hl{background:var(--yellow);border-radius:9px;padding:14px 18px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:var(--yt);text-align:center;box-shadow:var(--sh);}
+
+/* Phase row */
+.phase-row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:nowrap;overflow-x:auto;}
+.phase-card{flex-shrink:0;width:190px;background:var(--white);border-radius:10px;padding:14px 16px;box-shadow:var(--sh);border:1.5px solid #e0dbd4;cursor:pointer;transition:all .15s;}
+.phase-card:hover{transform:translateY(-2px);box-shadow:var(--sh2);}
+.phase-card.sel{border-color:#1a1a1a;}
+.pc-num{font-family:'Nunito',sans-serif;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+.pc-name{font-family:'Nunito',sans-serif;font-size:13px;font-weight:900;color:#1a1a1a;margin-bottom:4px;}
+.pc-sub{font-size:11px;color:#888;line-height:1.45;}
+.phase-detail{background:var(--white);border-radius:10px;padding:20px 24px;box-shadow:var(--sh);border:1.5px solid #e0dbd4;margin-bottom:14px;animation:fu .15s ease;display:none;}
+.phase-detail.on{display:block;}
+@keyframes fu{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.pd-title{font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#1a1a1a;margin-bottom:10px;}
+.pd-steps{display:flex;flex-direction:column;gap:6px;}
+.pd-step{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:7px;background:#f9f9f8;border:1px solid #e5e2dc;}
+.pd-dot{width:7px;height:7px;border-radius:50%;margin-top:4px;flex-shrink:0;}
+.pd-sname{font-size:13px;font-weight:700;color:#1a1a1a;}
+.pd-sdesc{font-size:12px;color:#888;}
+
+/* Detail expandable */
+.det-step{cursor:pointer;}
+.det-step:hover{background:#f0f0ee !important;}
+.det-exp{display:none;padding:8px 10px 0;font-size:12px;color:#555;line-height:1.65;}
+.det-exp.on{display:block;}
+.det-note{margin-top:8px;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:11px;color:#78350f;}
+
+/* QA */
+.qa{background:var(--white);border-radius:9px;border:1.5px solid #e0dbd4;overflow:hidden;box-shadow:var(--sh);margin-bottom:7px;}
+.qa-q{padding:13px 16px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:#1a1a1a;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.qa-q:hover{background:#fafaf8;}
+.qa-chev{font-size:11px;color:#aaa;transition:transform .18s;flex-shrink:0;}
+.qa-chev.o{transform:rotate(180deg);}
+.qa-a{display:none;padding:0 16px 13px;font-size:13px;color:#555;line-height:1.65;border-top:1px solid #f0ede8;}
+.qa-a.o{display:block;}
+
+/* Slack mockup */
+.slack{background:var(--white);border-radius:10px;overflow:hidden;box-shadow:var(--sh);border:1.5px solid #e0dbd4;max-width:560px;flex:1;min-width:280px;}
+.slack-hdr{padding:11px 15px;border-bottom:1px solid #e5e2dc;display:flex;align-items:center;gap:6px;}
+.slack-hash{font-size:14px;color:#888;font-weight:700;}
+.slack-name{font-family:'Nunito',sans-serif;font-size:13px;font-weight:900;}
+.slack-body{padding:14px;display:flex;flex-direction:column;gap:12px;}
+.smsg{display:flex;gap:9px;align-items:flex-start;animation:fu .2s ease;}
+.savatar{width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Nunito',sans-serif;font-size:9px;font-weight:900;flex-shrink:0;}
+.av-b{background:var(--green);color:var(--gt);}
+.av-u{background:var(--blue);color:var(--bt);}
+.sbub{flex:1;}
+.ssen{font-size:12px;font-weight:700;margin-bottom:3px;color:#1a1a1a;}
+.ssen span{font-weight:400;color:#aaa;margin-left:4px;}
+.scard{background:#f9f9f8;border:1px solid #e5e2dc;border-left:3px solid var(--gd);border-radius:0 7px 7px 0;padding:9px 12px;margin-top:2px;}
+.scard-t{font-size:12px;font-weight:700;margin-bottom:6px;color:#1a1a1a;}
+.sf{display:flex;gap:7px;font-size:12px;margin-bottom:3px;}
+.sl{color:#aaa;min-width:95px;flex-shrink:0;}
+.sv{color:#1a1a1a;}
+.sv-g{color:var(--gd);font-weight:600;}
+.sv-a{color:var(--od);font-weight:600;}
+.sv-m{color:#aaa;}
+.ssteps{font-size:11px;color:#aaa;margin:5px 0 3px;font-style:italic;}
+.sacts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+.sbtn{font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .12s;border:none;}
+.sbp{background:var(--green);color:var(--gt);}
+.sbp:hover{filter:brightness(.95);}
+.sbs{background:#f0f0ee;color:#666;border:1px solid #e0dbd4;}
+.sbs:hover{background:#e8e8e5;}
+.stxt{font-size:12px;color:#666;margin-top:2px;line-height:1.6;}
+
+/* Secret section */
+.secret-banner{background:var(--orange);border-radius:9px;padding:12px 18px;margin-bottom:20px;display:flex;align-items:center;gap:10px;box-shadow:var(--sh);}
+.secret-icon{font-size:20px;}
+.secret-text{font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:var(--ot);}
+
+/* PIN keypad */
+.pkey{font-family:'Nunito',sans-serif;font-size:18px;font-weight:800;width:100%;padding:12px 0;border-radius:9px;border:1.5px solid #e0dbd4;background:var(--white);color:#1a1a1a;cursor:pointer;transition:all .12s;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.pkey:hover{background:#f5f5f3;border-color:#bbb;}
+.pkey:active{transform:scale(.95);background:#eee;}
+.pkey-clear{font-size:14px;color:#aaa;}
+.pkey-clear:hover{color:#e03060;background:#fff0f4;border-color:#f5b3c8;}
+</style>
+</head>
+<body>
+<div class="board">
+
+<!-- Header -->
+<div class="hdr">
+  <div class="hdr-left">
+    <h1>Ariadne — AI Production Support</h1>
+    <p>EOS + RAG for incident triage · Roadmap, architecture & Slack flow</p>
+  </div>
+  <div class="hpills">
+    <span class="pill py">POC proposal</span>
+    <span class="pill pb">EOS + RAG</span>
+    <span class="pill pg">Copilot — not autopilot</span>
+  </div>
+</div>
+
+<!-- Nav -->
+<div class="nav">
+  <button class="ntab on"     onclick="sw('roadmap',this)">Roadmap</button>
+  <button class="ntab"        onclick="sw('arch',this)">How it works</button>
+  <button class="ntab"        onclick="sw('slack',this)">Slack demo</button>
+  <span id="ver-btn" onclick="trySecret(this)" style="font-size:11px;color:#ccc;cursor:default;padding:7px 10px;border-radius:20px;user-select:none;letter-spacing:.03em;transition:color .2s;" title="">v1.4.2</span>
+</div>
+
+<!-- ═══════════════ ROADMAP ═══════════════ -->
+<div class="view on" id="v-roadmap">
+
+  <div class="slabel">The 5 phases — each one enables the next</div>
+  <div class="phase-row" id="phase-row"></div>
+  <div id="phase-detail"></div>
+
+  <hr class="div">
+
+  <div class="slabel">Key dependency</div>
+  <div class="row">
+    <div class="s sy s-lg"><div class="tape"></div>
+      <div class="st">Phase 1 unblocks everything</div>
+      <div class="sb">Χωρίς correlation IDs → δεν μπορείς να κάνεις log compression.<br>Χωρίς outcome records → δεν υπάρχει knowledge base.<br>Χωρίς knowledge base → το EOS δίνει generic απαντήσεις.</div>
+    </div>
+    <div class="s sp s-lg"><div class="tape"></div>
+      <div class="st">Runbooks — το κενό που πρέπει να καλυφθεί</div>
+      <div class="sb">Αν δεν υπάρχουν σήμερα, αρχίζουμε τώρα. Ο engineer γράφει 5 γραμμές κάθε φορά που λύνει ένα incident. Με τον καιρό γίνεται runbook.</div>
+    </div>
+    <div class="s sg s-lg"><div class="tape"></div>
+      <div class="st">POC scope</div>
+      <div class="sb">Ένα service · 3-4 εβδομάδες · ένας engineer. Μετράμε χρόνο triage πριν και μετά. Αν δεν κινείται ο αριθμός, σταματάμε.</div>
+    </div>
+  </div>
+
+  <hr class="div">
+
+  <div class="slabel">Success metrics</div>
+  <div class="row">
+    <div class="card" style="flex:1;min-width:180px;">
+      <div class="card-t"><span class="num ny">1</span>Χρόνος triage</div>
+      <div class="card-b">Λεπτά από alert μέχρι πρώτη υπόθεση root cause — πριν και μετά.</div>
+    </div>
+    <div class="card" style="flex:1;min-width:180px;">
+      <div class="card-t"><span class="num nb">2</span>Reuse rate</div>
+      <div class="card-b">Πόσα incidents λύθηκαν με γνωστό fix χωρίς escalation.</div>
+    </div>
+    <div class="card" style="flex:1;min-width:180px;">
+      <div class="card-t"><span class="num ng">3</span>Context gathering</div>
+      <div class="card-b">Χρόνος που ξοδεύει ο on-call μαζεύοντας context από Slack/Confluence.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════ HOW IT WORKS ═══════════════ -->
+<div class="view" id="v-arch">
+
+  <div class="slabel">What EOS receives on every alert</div>
+  <div class="row" style="margin-bottom:20px;">
+    <div class="s spu s-sm"><div class="st">Alert</div><div class="sb">Ποιο service, τι severity, τι συνέβη.</div></div>
+    <div class="s sg s-sm"><div class="st">Compressed logs</div><div class="sb">ERRORs/WARNs · τελευταία 15 λεπτά · φιλτραρισμένα ανά correlation ID.</div></div>
+    <div class="s sbl s-sm"><div class="st">Past incidents</div><div class="sb">Top 5 παρόμοια από το knowledge base — retrieved by semantic similarity.</div></div>
+    <div class="s so s-sm"><div class="st">Runbooks</div><div class="sb">Γνωστά βήματα επίλυσης για αυτό τον τύπο incident.</div></div>
+  </div>
+
+  <div class="hl" style="margin-bottom:20px;">EOS διαβάζει και τα 4 μαζί → root cause + confidence level + suggested next steps</div>
+
+  <hr class="div">
+
+  <!-- DIAGRAM 1: Full system -->
+  <div class="slabel">Full system — top to bottom</div>
+  <div class="card" style="margin-bottom:20px;overflow-x:auto;">
+    <svg width="100%" viewBox="0 0 680 440" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <rect x="140" y="16" width="400" height="50" rx="8" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.5"/>
+      <text x="340" y="38" text-anchor="middle" fill="#4c1d95" font-size="13" font-weight="700" font-family="'Nunito',sans-serif">Ariadne Services</text>
+      <text x="340" y="56" text-anchor="middle" fill="#6d28d9" font-size="11" font-family="'Nunito Sans',sans-serif">All services emit structured logs, metrics and alerts</text>
+
+      <line x1="340" y1="66" x2="340" y2="96" stroke="#aaa" stroke-width="1" marker-end="url(#ar)"/>
+      <text x="354" y="85" fill="#bbb" font-size="10" font-family="'Nunito Sans',sans-serif">logs + alerts + metrics</text>
+
+      <rect x="140" y="96" width="400" height="46" rx="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+      <text x="340" y="116" text-anchor="middle" fill="#14532d" font-size="13" font-weight="700" font-family="'Nunito',sans-serif">Filter + compress</text>
+      <text x="340" y="133" text-anchor="middle" fill="#15803d" font-size="11" font-family="'Nunito Sans',sans-serif">Keep ERRORs/WARNs · link by correlation ID · last 15 min</text>
+
+      <line x1="340" y1="142" x2="340" y2="170" stroke="#aaa" stroke-width="1" marker-end="url(#ar)"/>
+
+      <rect x="100" y="170" width="480" height="80" rx="8" fill="#fef9c3" stroke="#fde047" stroke-width="1.5"/>
+      <text x="340" y="198" text-anchor="middle" fill="#713f12" font-size="14" font-weight="800" font-family="'Nunito',sans-serif">EOS — reasoning engine</text>
+      <text x="340" y="218" text-anchor="middle" fill="#854d0e" font-size="11" font-family="'Nunito Sans',sans-serif">Receives: compressed logs · past incidents (RAG) · runbooks (RAG) · codebase (RAG)</text>
+      <text x="340" y="238" text-anchor="middle" fill="#854d0e" font-size="11" font-family="'Nunito Sans',sans-serif">Produces: root cause · confidence level · suggested next steps</text>
+
+      <rect x="14" y="186" width="76" height="48" rx="7" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+      <text x="52" y="207" text-anchor="middle" fill="#14532d" font-size="10" font-weight="700" font-family="'Nunito',sans-serif">Past</text>
+      <text x="52" y="221" text-anchor="middle" fill="#14532d" font-size="10" font-weight="700" font-family="'Nunito',sans-serif">incidents</text>
+      <line x1="90" y1="210" x2="100" y2="210" stroke="#86efac" stroke-width="1" marker-end="url(#ar)"/>
+
+      <rect x="590" y="186" width="76" height="48" rx="7" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+      <text x="628" y="207" text-anchor="middle" fill="#14532d" font-size="10" font-weight="700" font-family="'Nunito',sans-serif">Run-</text>
+      <text x="628" y="221" text-anchor="middle" fill="#14532d" font-size="10" font-weight="700" font-family="'Nunito',sans-serif">books</text>
+      <line x1="590" y1="210" x2="580" y2="210" stroke="#86efac" stroke-width="1" marker-end="url(#ar)"/>
+
+      <line x1="340" y1="250" x2="340" y2="278" stroke="#aaa" stroke-width="1" marker-end="url(#ar)"/>
+
+      <rect x="140" y="278" width="400" height="46" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+      <text x="340" y="298" text-anchor="middle" fill="#7c2d12" font-size="13" font-weight="700" font-family="'Nunito',sans-serif">Confidence gate</text>
+      <text x="340" y="316" text-anchor="middle" fill="#9a3412" font-size="11" font-family="'Nunito Sans',sans-serif">Low → info only · Medium → suggest steps · High → request approval</text>
+
+      <line x1="216" y1="324" x2="185" y2="356" stroke="#ccc" stroke-width="1" marker-end="url(#ar)"/>
+      <line x1="340" y1="324" x2="340" y2="356" stroke="#ccc" stroke-width="1" marker-end="url(#ar)"/>
+      <line x1="464" y1="324" x2="495" y2="356" stroke="#ccc" stroke-width="1" marker-end="url(#ar)"/>
+
+      <rect x="82" y="356" width="160" height="46" rx="7" fill="#fff" stroke="#e5e2dc" stroke-width="1.5"/>
+      <text x="162" y="376" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Slack</text>
+      <text x="162" y="393" text-anchor="middle" fill="#888" font-size="11" font-family="'Nunito Sans',sans-serif">RCA + next steps</text>
+
+      <rect x="260" y="356" width="160" height="46" rx="7" fill="#fff" stroke="#e5e2dc" stroke-width="1.5"/>
+      <text x="340" y="376" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Safe action</text>
+      <text x="340" y="393" text-anchor="middle" fill="#888" font-size="11" font-family="'Nunito Sans',sans-serif">Engineer approves</text>
+
+      <rect x="438" y="356" width="160" height="46" rx="7" fill="#fff" stroke="#e5e2dc" stroke-width="1.5"/>
+      <text x="518" y="376" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Escalate</text>
+      <text x="518" y="393" text-anchor="middle" fill="#888" font-size="11" font-family="'Nunito Sans',sans-serif">Owner + audit trail</text>
+    </svg>
+  </div>
+
+  <hr class="div">
+
+  <!-- DIAGRAM 2: What EOS receives -->
+  <div class="slabel">What EOS receives — all four inputs together</div>
+  <div class="card" style="margin-bottom:20px;overflow-x:auto;">
+    <svg width="100%" viewBox="0 0 680 340" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="ar2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <rect x="20"  y="16" width="295" height="56" rx="8" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.5"/>
+      <text x="167" y="40" text-anchor="middle" fill="#4c1d95" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Alert</text>
+      <text x="167" y="60" text-anchor="middle" fill="#6d28d9" font-size="11" font-family="'Nunito Sans',sans-serif">What broke · which service · severity</text>
+
+      <rect x="365" y="16" width="295" height="56" rx="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+      <text x="512" y="40" text-anchor="middle" fill="#14532d" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Compressed logs</text>
+      <text x="512" y="60" text-anchor="middle" fill="#15803d" font-size="11" font-family="'Nunito Sans',sans-serif">ERRORs/WARNs · last 15 min · by correlation ID</text>
+
+      <rect x="20"  y="106" width="295" height="56" rx="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+      <text x="167" y="130" text-anchor="middle" fill="#14532d" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Past incidents (RAG)</text>
+      <text x="167" y="150" text-anchor="middle" fill="#15803d" font-size="11" font-family="'Nunito Sans',sans-serif">Top 5 most similar — from knowledge base</text>
+
+      <rect x="365" y="106" width="295" height="56" rx="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+      <text x="512" y="130" text-anchor="middle" fill="#14532d" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Runbooks + codebase (RAG)</text>
+      <text x="512" y="150" text-anchor="middle" fill="#15803d" font-size="11" font-family="'Nunito Sans',sans-serif">Known fix steps + how the code works</text>
+
+      <line x1="167" y1="72"  x2="167" y2="192" stroke="#ccc" stroke-width="0.8"/>
+      <line x1="512" y1="72"  x2="512" y2="192" stroke="#ccc" stroke-width="0.8"/>
+      <line x1="167" y1="162" x2="167" y2="192" stroke="#ccc" stroke-width="0.8"/>
+      <line x1="512" y1="162" x2="512" y2="192" stroke="#ccc" stroke-width="0.8"/>
+      <path d="M167 192 L340 192" fill="none" stroke="#ccc" stroke-width="0.8"/>
+      <path d="M512 192 L340 192" fill="none" stroke="#ccc" stroke-width="0.8"/>
+      <line x1="340" y1="192" x2="340" y2="212" stroke="#aaa" stroke-width="1" marker-end="url(#ar2)"/>
+
+      <rect x="130" y="212" width="420" height="60" rx="8" fill="#fef9c3" stroke="#fde047" stroke-width="1.5"/>
+      <text x="340" y="238" text-anchor="middle" fill="#713f12" font-size="14" font-weight="800" font-family="'Nunito',sans-serif">EOS reads all four together</text>
+      <text x="340" y="258" text-anchor="middle" fill="#854d0e" font-size="11" font-family="'Nunito Sans',sans-serif">Root cause · confidence · suggested fix · owning team</text>
+
+      <line x1="340" y1="272" x2="340" y2="300" stroke="#aaa" stroke-width="1" marker-end="url(#ar2)"/>
+      <rect x="200" y="300" width="280" height="34" rx="7" fill="#fff" stroke="#e5e2dc" stroke-width="1.5"/>
+      <text x="340" y="321" text-anchor="middle" fill="#1a1a1a" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Structured output → Slack thread</text>
+    </svg>
+  </div>
+
+  <hr class="div">
+
+  <!-- DIAGRAM 3: How RAG works -->
+  <div class="slabel">How RAG finds similar incidents</div>
+  <div class="card" style="margin-bottom:20px;overflow-x:auto;">
+    <svg width="100%" viewBox="0 0 680 310" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="ar3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <rect x="20"  y="20" width="178" height="52" rx="8" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.5"/>
+      <text x="109" y="42" text-anchor="middle" fill="#4c1d95" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">New incident</text>
+      <text x="109" y="60" text-anchor="middle" fill="#6d28d9" font-size="11" font-family="'Nunito Sans',sans-serif">plain text description</text>
+
+      <line x1="198" y1="46" x2="226" y2="46" stroke="#aaa" stroke-width="1" marker-end="url(#ar3)"/>
+
+      <rect x="226" y="20" width="198" height="52" rx="8" fill="#fef9c3" stroke="#fde047" stroke-width="1.5"/>
+      <text x="325" y="42" text-anchor="middle" fill="#713f12" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Embedding model</text>
+      <text x="325" y="60" text-anchor="middle" fill="#854d0e" font-size="11" font-family="'Nunito Sans',sans-serif">converts text → numbers</text>
+
+      <line x1="424" y1="46" x2="452" y2="46" stroke="#aaa" stroke-width="1" marker-end="url(#ar3)"/>
+
+      <rect x="452" y="20" width="208" height="52" rx="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+      <text x="556" y="42" text-anchor="middle" fill="#14532d" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Knowledge base</text>
+      <text x="556" y="60" text-anchor="middle" fill="#15803d" font-size="11" font-family="'Nunito Sans',sans-serif">finds closest past cases</text>
+
+      <rect x="20" y="104" width="400" height="68" rx="8" fill="#f9f9f8" stroke="#e5e2dc" stroke-width="1.5"/>
+      <text x="40" y="128" fill="#6d28d9" font-size="12" font-family="'Courier New',monospace" font-weight="700">"clients not receiving updates"</text>
+      <text x="40" y="150" fill="#15803d" font-size="12" font-family="'Courier New',monospace" font-weight="700">"live odds not refreshing"</text>
+      <text x="40" y="166" fill="#888" font-size="11" font-family="'Nunito Sans',sans-serif">Different words — same meaning — similar numbers — match found</text>
+
+      <line x1="556" y1="72" x2="556" y2="122" stroke="#aaa" stroke-width="1" marker-end="url(#ar3)"/>
+      <rect x="452" y="122" width="208" height="50" rx="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+      <text x="556" y="144" text-anchor="middle" fill="#14532d" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Top 5 similar cases</text>
+      <text x="556" y="162" text-anchor="middle" fill="#15803d" font-size="11" font-family="'Nunito Sans',sans-serif">with full context</text>
+
+      <line x1="556" y1="172" x2="556" y2="210" stroke="#aaa" stroke-width="0.8"/>
+      <path d="M556 210 L340 210" fill="none" stroke="#aaa" stroke-width="0.8" marker-end="url(#ar3)"/>
+
+      <rect x="130" y="210" width="420" height="52" rx="8" fill="#fef9c3" stroke="#fde047" stroke-width="1.5"/>
+      <text x="340" y="232" text-anchor="middle" fill="#713f12" font-size="13" font-weight="800" font-family="'Nunito',sans-serif">EOS receives top 5 + current incident</text>
+      <text x="340" y="250" text-anchor="middle" fill="#854d0e" font-size="11" font-family="'Nunito Sans',sans-serif">Answers using Ariadne history — not generic knowledge</text>
+
+      <line x1="340" y1="262" x2="340" y2="288" stroke="#aaa" stroke-width="1" marker-end="url(#ar3)"/>
+      <rect x="200" y="288" width="280" height="16" rx="5" fill="#fff" stroke="#e5e2dc" stroke-width="1"/>
+      <text x="340" y="300" text-anchor="middle" fill="#555" font-size="11" font-family="'Nunito Sans',sans-serif">Root cause + confidence + suggested fix</text>
+    </svg>
+  </div>
+
+  <hr class="div">
+
+  <!-- DIAGRAM 4: Learning loop -->
+  <div class="slabel">Learning loop — how the system improves over time</div>
+  <div class="card" style="margin-bottom:20px;overflow-x:auto;">
+    <svg width="100%" viewBox="0 0 680 210" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="ar4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+      <rect x="14"  y="40" width="148" height="52" rx="8" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.5"/>
+      <text x="88"  y="62" text-anchor="middle" fill="#4c1d95" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Incident</text>
+      <text x="88"  y="80" text-anchor="middle" fill="#6d28d9" font-size="11" font-family="'Nunito Sans',sans-serif">happens</text>
+      <line x1="162" y1="66" x2="182" y2="66" stroke="#aaa" stroke-width="1" marker-end="url(#ar4)"/>
+
+      <rect x="182" y="40" width="148" height="52" rx="8" fill="#fef9c3" stroke="#fde047" stroke-width="1.5"/>
+      <text x="256" y="62" text-anchor="middle" fill="#713f12" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">EOS analyses</text>
+      <text x="256" y="80" text-anchor="middle" fill="#854d0e" font-size="11" font-family="'Nunito Sans',sans-serif">using knowledge base</text>
+      <line x1="330" y1="66" x2="350" y2="66" stroke="#aaa" stroke-width="1" marker-end="url(#ar4)"/>
+
+      <rect x="350" y="40" width="148" height="52" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+      <text x="424" y="62" text-anchor="middle" fill="#7c2d12" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Resolved</text>
+      <text x="424" y="80" text-anchor="middle" fill="#9a3412" font-size="11" font-family="'Nunito Sans',sans-serif">auto or by engineer</text>
+      <line x1="498" y1="66" x2="518" y2="66" stroke="#aaa" stroke-width="1" marker-end="url(#ar4)"/>
+
+      <rect x="518" y="40" width="148" height="52" rx="8" fill="#dcfce7" stroke="#86efac" stroke-width="1.5"/>
+      <text x="592" y="62" text-anchor="middle" fill="#14532d" font-size="12" font-weight="700" font-family="'Nunito',sans-serif">Reviewed</text>
+      <text x="592" y="80" text-anchor="middle" fill="#15803d" font-size="11" font-family="'Nunito Sans',sans-serif">outcome validated</text>
+
+      <path d="M592 92 L592 148 L88 148 L88 92" fill="none" stroke="#15803d" stroke-width="1" stroke-dasharray="5 3" marker-end="url(#ar4)"/>
+
+      <rect x="270" y="137" width="140" height="22" rx="5" fill="#dcfce7" stroke="#86efac" stroke-width="1"/>
+      <text x="340" y="152" text-anchor="middle" fill="#14532d" font-size="10" font-weight="700" font-family="'Nunito',sans-serif">added to knowledge base</text>
+
+      <text x="340" y="186" text-anchor="middle" fill="#aaa" font-size="11" font-family="'Nunito Sans',sans-serif">No model retraining needed — knowledge base requires periodic curation</text>
+    </svg>
+  </div>
+
+  <div class="row">
+    <div class="s sp"><div class="st">Τα logs ΔΕΝ μπαίνουν στο RAG</div><div class="sb">Είναι real-time. Φιλτράρονται και δίνονται απευθείας στο prompt — δεν αποθηκεύονται.</div></div>
+    <div class="s so"><div class="st">Ένα RAG · νέα tags</div><div class="sb">type=incident και type=runbook στο ίδιο vector DB. Χωρίς νέα infrastructure.</div></div>
+    <div class="s sy"><div class="st">Μόνο validated outcomes</div><div class="sb">Δεν μπαίνει αυτόματα κάθε resolution. Κάποιος ελέγχει ότι το root cause και το fix είναι σωστά.</div></div>
+  </div>
+
+</div>
+
+<!-- ═══════════════ SLACK ═══════════════ -->
+<div class="view" id="v-slack">
+  <div class="row" style="align-items:flex-start;">
+
+    <div class="slack">
+      <div class="slack-hdr"><span class="slack-hash">#</span><span class="slack-name">incidents-production</span></div>
+      <div class="slack-body">
+
+        <div class="smsg">
+          <div class="savatar av-b">PS</div>
+          <div class="sbub">
+            <div class="ssen">PS-Bot <span>Today 14:32</span></div>
+            <div class="scard">
+              <div class="scard-t">New incident — live event update delay</div>
+              <div class="sf"><span class="sl">Service</span><span class="sv">WebSignalR</span></div>
+              <div class="sf"><span class="sl">Severity</span><span class="sv sv-a">P2 — high</span></div>
+              <div class="sf"><span class="sl">Symptom</span><span class="sv">Clients receiving stale market data</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="smsg">
+          <div class="savatar av-b">PS</div>
+          <div class="sbub">
+            <div class="ssen">PS-Bot <span>Today 14:32 · thread</span></div>
+            <div class="scard">
+              <div class="scard-t">Root cause analysis — high confidence</div>
+              <div class="sf"><span class="sl">Likely cause</span><span class="sv">Delay in event propagation from upstream service</span></div>
+              <div class="sf"><span class="sl">Similar cases</span><span class="sv sv-g">2 past incidents — same pattern, same fix</span></div>
+              <div class="sf"><span class="sl">Owning team</span><span class="sv sv-g">WebSignalR / Feed integration</span></div>
+              <div class="ssteps">Suggested next steps</div>
+              <div class="sf"><span class="sl">1.</span><span class="sv sv-m">Check upstream service health and recent deploys</span></div>
+              <div class="sf"><span class="sl">2.</span><span class="sv sv-m">Validate message flow between services</span></div>
+              <div class="sf"><span class="sl">3.</span><span class="sv sv-m">Notify owning team</span></div>
+              <div class="sacts">
+                <button class="sbtn sbp" onclick="af()">Approve safe action</button>
+                <button class="sbtn sbs" onclick="ae()">Escalate to on-call</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="smsg" id="mfix" style="display:none;">
+          <div class="savatar av-b">PS</div>
+          <div class="sbub">
+            <div class="ssen">PS-Bot <span>Today 14:34</span></div>
+            <div class="scard" style="border-left-color:var(--gd);">
+              <div class="scard-t" style="color:var(--gd);">Action executed — engineer approved</div>
+              <div class="sf"><span class="sl">Action</span><span class="sv sv-g">Stateless connector restarted</span></div>
+              <div class="sf"><span class="sl">Status</span><span class="sv sv-g">Update flow restored · resolved</span></div>
+              <div class="sf"><span class="sl">Audit</span><span class="sv sv-m">Outcome recorded · pending review</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="smsg" id="mesc" style="display:none;">
+          <div class="savatar av-u">OC</div>
+          <div class="sbub">
+            <div class="ssen">On-call engineer <span>Today 14:35</span></div>
+            <div class="stxt">Taking over. Reviewing the propagation path now.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="col" style="flex:1;min-width:200px;">
+      <div class="card">
+        <div class="card-t">Confidence levels</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:8px 10px;">
+            <div style="font-family:'Nunito',sans-serif;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#1d4ed8;margin-bottom:2px;">Low</div>
+            <div style="font-size:12px;color:#555;">Info only — no actions</div>
+          </div>
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:8px 10px;">
+            <div style="font-family:'Nunito',sans-serif;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#92400e;margin-bottom:2px;">Medium</div>
+            <div style="font-size:12px;color:#555;">Suggests steps — engineer decides</div>
+          </div>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:8px 10px;">
+            <div style="font-family:'Nunito',sans-serif;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#14532d;margin-bottom:2px;">High</div>
+            <div style="font-size:12px;color:#555;">Safe action — needs approval</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-t">Commands</div>
+        <div style="display:flex;flex-direction:column;gap:5px;">
+          <div style="background:#f9f9f8;border-radius:6px;padding:7px 10px;border:1px solid #e5e2dc;">
+            <div style="font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;color:#1a1a1a;margin-bottom:1px;">/incident status</div>
+            <div style="font-size:11px;color:#888;">Open incidents and analysis state</div>
+          </div>
+          <div style="background:#f9f9f8;border-radius:6px;padding:7px 10px;border:1px solid #e5e2dc;">
+            <div style="font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;color:#1a1a1a;margin-bottom:1px;">/incident similar</div>
+            <div style="font-size:11px;color:#888;">Show most similar past cases</div>
+          </div>
+          <div style="background:#f9f9f8;border-radius:6px;padding:7px 10px;border:1px solid #e5e2dc;">
+            <div style="font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;color:#1a1a1a;margin-bottom:1px;">/incident resolve</div>
+            <div style="font-size:11px;color:#888;">Close and submit outcome for review</div>
+          </div>
+          <div style="background:#f9f9f8;border-radius:6px;padding:7px 10px;border:1px solid #e5e2dc;">
+            <div style="font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;color:#1a1a1a;margin-bottom:1px;">/incident escalate</div>
+            <div style="font-size:11px;color:#888;">Page on-call with full briefing</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ SECRET / FOR ME ═══════════════ -->
+<div class="view" id="v-secret">
+
+  <div id="pin-overlay" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:420px;">
+    <div style="background:var(--white);border-radius:14px;padding:36px 40px;box-shadow:var(--sh2);border:1.5px solid #e0dbd4;max-width:320px;width:100%;text-align:center;">
+      <div style="font-size:28px;margin-bottom:12px;">🔒</div>
+      <div style="font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#1a1a1a;margin-bottom:4px;">Private section</div>
+      <div style="font-size:12px;color:#aaa;margin-bottom:24px;">Enter PIN to continue</div>
+      <div id="pin-dots" style="display:flex;justify-content:center;gap:12px;margin-bottom:24px;">
+        <div class="pdot" style="width:14px;height:14px;border-radius:50%;background:#e5e2dc;transition:background .15s;"></div>
+        <div class="pdot" style="width:14px;height:14px;border-radius:50%;background:#e5e2dc;transition:background .15s;"></div>
+        <div class="pdot" style="width:14px;height:14px;border-radius:50%;background:#e5e2dc;transition:background .15s;"></div>
+        <div class="pdot" style="width:14px;height:14px;border-radius:50%;background:#e5e2dc;transition:background .15s;"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:220px;margin:0 auto;">
+        <button class="pkey" onclick="pk('1')">1</button>
+        <button class="pkey" onclick="pk('2')">2</button>
+        <button class="pkey" onclick="pk('3')">3</button>
+        <button class="pkey" onclick="pk('4')">4</button>
+        <button class="pkey" onclick="pk('5')">5</button>
+        <button class="pkey" onclick="pk('6')">6</button>
+        <button class="pkey" onclick="pk('7')">7</button>
+        <button class="pkey" onclick="pk('8')">8</button>
+        <button class="pkey" onclick="pk('9')">9</button>
+        <button class="pkey pkey-clear" onclick="pc()">✕</button>
+        <button class="pkey" onclick="pk('0')">0</button>
+        <button class="pkey pkey-clear" onclick="pdel()">⌫</button>
+      </div>
+      <div id="pin-err" style="height:18px;margin-top:12px;font-size:12px;color:#d4367a;font-weight:700;opacity:0;transition:opacity .2s;"></div>
+    </div>
+  </div>
+
+  <div id="secret-content" style="display:none;">
+  <div class="secret-banner">
+    <span class="secret-icon">🔒</span>
+    <span class="secret-text">Μόνο για εσένα — pitch notes, tough Q&amp;A, και architecture summary. Μη δείξεις αυτή την tab.</span>
+  </div>
+
+  <div class="slabel">The pitch — Greek</div>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-t">Τι να πεις</div>
+    <div class="card-b" style="line-height:1.8;">
+      <p style="margin-bottom:8px;"><strong>Το πρόβλημα:</strong> Όταν σπάει κάτι, ο on-call ξοδεύει χρόνο ψάχνοντας σε Slack, Confluence, παλιά tickets. Η γνώση υπάρχει — αλλά είναι σκορπισμένη.</p>
+      <p style="margin-bottom:8px;"><strong>Η ιδέα:</strong> Να αξιοποιήσουμε το EOS που ήδη έχουμε. Όταν έρθει alert, μαζεύει αυτόματα logs, ψάχνει παρόμοια incidents, βρίσκει runbook — και τα δίνει όλα στο EOS. Το αποτέλεσμα εμφανίζεται στο Slack.</p>
+      <p style="margin-bottom:8px;"><strong>Τι δεν είναι:</strong> Δεν λύνει incidents μόνο του. Κάθε ενέργεια απαιτεί έγκριση engineer.</p>
+      <p><strong>Τι ζητάω:</strong> Ένα μικρό POC — 3-4 εβδομάδες, ένας engineer, ένα service.</p>
+    </div>
+  </div>
+
+  <hr class="div">
+
+  <div class="slabel">Tough questions — δικηγόρος του διαβόλου</div>
+
+  <div class="qa">
+    <div class="qa-q" onclick="tq(this)">"Γιατί τώρα; Έχουμε άλλες προτεραιότητες."<span class="qa-chev">▼</span></div>
+    <div class="qa-a">Δεν ζητάω να σταματήσει κάτι άλλο. Το POC γίνεται παράλληλα με έναν engineer σε ένα service. 3-4 εβδομάδες. Αν δεν βλέπουμε αποτέλεσμα, σταματάμε.</div>
+  </div>
+  <div class="qa">
+    <div class="qa-q" onclick="tq(this)">"Το EOS δεν είναι φτιαγμένο για PS. Θα δουλέψει;"<span class="qa-chev">▼</span></div>
+    <div class="qa-a">Δεν ξέρω — γι' αυτό POC και όχι rollout. Αυτό που ξέρω: το EOS ήδη κατανοεί τον κώδικά μας. Αν του δώσεις και ιστορικό incidents, έχει το context ενός senior engineer. Αν δεν φτάνει η ποιότητα, το POC θα το δείξει.</div>
+  </div>
+  <div class="qa">
+    <div class="qa-q" onclick="tq(this)">"Τα incidents μας είναι πολύπλοκα."<span class="qa-chev">▼</span></div>
+    <div class="qa-a">Στόχος είναι το 60-70% που είναι γνωστά patterns — incidents που έχουμε ξαναδεί. Για τα νέα και σύνθετα, ο engineer παραμένει αποκλειστικά υπεύθυνος. Το AI γλιτώνει το ψάξιμο.</div>
+  </div>
+  <div class="qa">
+    <div class="qa-q" onclick="tq(this)">"Ποιος θα το συντηρεί;"<span class="qa-chev">▼</span></div>
+    <div class="qa-a">Δεν χρειάζεται retraining. Χρειάζεται periodic review του knowledge base — μια φορά το μήνα. Δεν είναι full-time δουλειά.</div>
+  </div>
+  <div class="qa">
+    <div class="qa-q" onclick="tq(this)">"Sensitive data στα logs;"<span class="qa-chev">▼</span></div>
+    <div class="qa-a">Το EOS τρέχει στο δικό μας environment. Το log compression φιλτράρει sensitive fields πριν φτάσουν στο prompt. Αυτό πρέπει να οριστεί πριν βγει στο production.</div>
+  </div>
+  <div class="qa">
+    <div class="qa-q" onclick="tq(this)">"Τι αν το AI προτείνει λάθος fix;"<span class="qa-chev">▼</span></div>
+    <div class="qa-a">Explicit approval από engineer για κάθε ενέργεια. Automation μόνο σε safe, reversible actions. Audit trail πάντα. Αν κάτι πάει στραβά, γυρίζεις πίσω.</div>
+  </div>
+  <div class="qa">
+    <div class="qa-q" onclick="tq(this)">"Engineers θα εμπιστευτούν τυφλά το AI;"<span class="qa-chev">▼</span></div>
+    <div class="qa-a">Ο μεγαλύτερος κίνδυνος — δεν τον υποτιμώ. Γι' αυτό το confidence level είναι πάντα ορατό. Η κουλτούρα γύρω από αυτό πρέπει να χτιστεί συνειδητά.</div>
+  </div>
+  <div class="qa">
+    <div class="qa-q" onclick="tq(this)">"Πού είναι τα νούμερα;"<span class="qa-chev">▼</span></div>
+    <div class="qa-a">3 μετρήσεις πριν και μετά: (1) χρόνος triage, (2) reuse rate, (3) χρόνος context gathering. Αν δεν κινούνται οι αριθμοί, δεν προχωράμε.</div>
+  </div>
+
+  <hr class="div">
+
+  <div class="slabel">Architecture in one sentence</div>
+  <div class="row">
+    <div class="s sy s-full">
+      <div class="st">Τι υπάρχει ήδη</div>
+      <div class="sb">EOS (Gemini) + RAG over codebase. Ξέρει τον κώδικα. Δεν ξέρει τα incidents.</div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="s sg s-full">
+      <div class="st">Τι προσθέτουμε</div>
+      <div class="sb">RAG over incidents + RAG over runbooks → ίδιο vector DB, νέα tags (type=incident, type=runbook). Χωρίς νέα infrastructure.</div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="s sbl s-full">
+      <div class="st">Το prompt κάθε φορά</div>
+      <div class="sb">Alert + compressed logs (real-time, direct injection) + top-5 similar incidents (RAG) + matching runbook (RAG) + codebase context (RAG) → EOS → structured output → Slack.</div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="s sp s-full">
+      <div class="st">Γιατί τα logs δεν μπαίνουν στο RAG</div>
+      <div class="sb">Είναι ephemeral — αφορούν αυτό το incident, αυτή τη στιγμή. Δεν έχει νόημα να αποθηκευτούν για semantic search. Φιλτράρονται και μπαίνουν απευθείας στο prompt.</div>
+    </div>
+  </div>
+
+  </div><!-- end secret-content -->
+</div><!-- end v-secret -->
+
+</div><!-- end board -->
+<script>
+const phases = [
+  { n:'01', cls:'ny', name:'Standardize', sub:'Common log schema, correlation IDs, outcome records',
+    color:'#ffe566', tc:'#3d3000', dc:'#b8a000',
+    steps:[
+      {name:'Common alert format', desc:'Same fields on every alert — service, severity, time, what happened.', note:''},
+      {name:'Common log schema', desc:'Not identical everywhere — a baseline: service, correlation ID, environment, severity, message.', note:'Goal is a common baseline, not uniformity. Each service can add its own fields.'},
+      {name:'Correlation IDs', desc:'A shared ID that travels with every request across all services and actors. Critical for async flows.', note:'Without correlation IDs, cross-service incident analysis is guesswork.'},
+      {name:'When to log what', desc:'Structured events for transitions, warnings for recoverable situations, errors for failures that need action.', note:''},
+      {name:'Structured outcome record', desc:'Every closed incident: cause, fix, prevention. One owner responsible before the incident closes.', note:'If nobody owns the record it will not be completed consistently.'},
+    ]
+  },
+  { n:'02', cls:'nb', name:'Document', sub:'Build the knowledge base dataset',
+    color:'#b3d4ff', tc:'#0a2a5e', dc:'#3a7bd5',
+    steps:[
+      {name:'New incidents', desc:'All new incidents follow the outcome pattern — starting now. Cannot close without a completed record.', note:''},
+      {name:'Historical backfill', desc:'Top 10-20 most common incident types. Use Slack threads, tickets, postmortems as source material.', note:'Not all past incidents have enough context. Quality over quantity.'},
+    ]
+  },
+  { n:'03', cls:'ng', name:'Knowledge base', sub:'Index incidents and runbooks for RAG',
+    color:'#b8f0c8', tc:'#0a3320', dc:'#2a9e50',
+    steps:[
+      {name:'Incident index', desc:'One structured record per incident: symptoms, affected services, root cause, fix, outcome.', note:''},
+      {name:'Runbooks', desc:'Known fix steps per incident type, per service. One page per type is enough. Start writing now.', note:'If runbooks do not exist today, start as incidents happen. Build incrementally.'},
+      {name:'Load into vector DB', desc:'Records embedded and stored alongside codebase in existing RAG infrastructure. Same DB, new tags.', note:''},
+    ]
+  },
+  { n:'04', cls:'np', name:'Connect EOS', sub:'Add incidents + runbooks to existing RAG',
+    color:'#ffb3d9', tc:'#4a0025', dc:'#d4367a',
+    steps:[
+      {name:'Same vector DB, new tags', desc:'type=incident and type=runbook. No new layer, no new infrastructure.', note:'This is simpler than it sounds. The infrastructure is already there.'},
+      {name:'Build the prompt pipeline', desc:'Alert → compress logs → query RAG → send to EOS → post to Slack.', note:''},
+      {name:'Confidence gating', desc:'Low: info only. Medium: suggest steps. High: safe action pending engineer approval.', note:'Business-critical state changes always human-approved.'},
+    ]
+  },
+  { n:'05', cls:'no', name:'Slack', sub:'Deliver EOS output into incident channels',
+    color:'#ffd0a0', tc:'#3d1a00', dc:'#e07020',
+    steps:[
+      {name:'Thread replies', desc:'Bot posts RCA and next steps as thread reply to the alert. Links to logs and dashboards.', note:''},
+      {name:'Approval + audit trail', desc:'Every action requires explicit engineer approval. All actions logged. No unilateral bot actions.', note:''},
+    ]
+  },
+];
+
+function buildPhases() {
+  const row = document.getElementById('phase-row');
+  phases.forEach((p, i) => {
+    const c = document.createElement('div');
+    c.className = 'phase-card';
+    c.onclick = () => showPhase(i, c);
+    c.innerHTML = `<div class="pc-num" style="color:${p.dc};">${p.n}</div><div class="pc-name">${p.name}</div><div class="pc-sub">${p.sub}</div>`;
+    row.appendChild(c);
+  });
+  showPhase(0, row.children[0]);
+}
+
+function showPhase(i, el) {
+  document.querySelectorAll('.phase-card').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+  const p = phases[i];
+  const det = document.getElementById('phase-detail');
+  const stepsHtml = p.steps.map(s => `
+    <div class="pd-step det-step" onclick="toggleStep(this)">
+      <div class="pd-dot" style="background:${p.dc};margin-top:6px;"></div>
+      <div style="flex:1;">
+        <div class="pd-sname">${s.name}</div>
+        <div class="pd-sdesc">${s.desc}</div>
+        <div class="det-exp">${s.note ? `<div class="det-note">${s.note}</div>` : ''}</div>
+      </div>
+      <div style="font-size:11px;color:#ccc;flex-shrink:0;margin-top:4px;">›</div>
+    </div>`).join('');
+  det.innerHTML = `<div class="phase-detail on" style="border-color:${p.dc};"><div class="pd-title" style="color:${p.dc};">Phase ${p.n} — ${p.name}</div><div class="pd-steps">${stepsHtml}</div></div>`;
+}
+
+function toggleStep(el) {
+  const exp = el.querySelector('.det-exp');
+  if (exp) exp.classList.toggle('on');
+}
+
+function sw(n, btn) {
+  document.querySelectorAll('.ntab').forEach(t => t.classList.remove('on'));
+  if (btn && btn.classList) btn.classList.add('on');
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
+  document.getElementById('v-' + n).classList.add('on');
+  if (n === 'secret') {
+    pinReset();
+  }
+}
+
+function tq(el) {
+  const a = el.nextElementSibling;
+  const c = el.querySelector('.qa-chev');
+  a.classList.toggle('o');
+  c.classList.toggle('o');
+}
+
+function af() { document.getElementById('mfix').style.display='flex'; document.getElementById('mesc').style.display='none'; }
+function ae() { document.getElementById('mesc').style.display='flex'; document.getElementById('mfix').style.display='none'; }
+
+// ── PIN logic ──
+const PIN = '3152';
+let pinEntry = '';
+
+function pinReset() {
+  pinEntry = '';
+  updateDots();
+  const err = document.getElementById('pin-err');
+  if (err) { err.style.opacity = '0'; err.textContent = ''; }
+  document.getElementById('pin-overlay').style.display = 'flex';
+  document.getElementById('secret-content').style.display = 'none';
+}
+
+function updateDots() {
+  const dots = document.querySelectorAll('.pdot');
+  dots.forEach((d, i) => {
+    d.style.background = i < pinEntry.length ? '#1a1a1a' : '#e5e2dc';
+  });
+}
+
+function pk(digit) {
+  if (pinEntry.length >= 4) return;
+  pinEntry += digit;
+  updateDots();
+  if (pinEntry.length === 4) {
+    setTimeout(() => {
+      if (pinEntry === PIN) {
+        document.getElementById('pin-overlay').style.display = 'none';
+        document.getElementById('secret-content').style.display = 'block';
+      } else {
+        const err = document.getElementById('pin-err');
+        err.textContent = 'Wrong PIN — try again';
+        err.style.opacity = '1';
+        const dots = document.querySelectorAll('.pdot');
+        dots.forEach(d => d.style.background = '#ffb3d9');
+        setTimeout(() => {
+          pinEntry = '';
+          updateDots();
+        }, 700);
+      }
+    }, 120);
+  }
+}
+
+function pdel() {
+  pinEntry = pinEntry.slice(0, -1);
+  updateDots();
+}
+
+function pc() {
+  pinEntry = '';
+  updateDots();
+  const err = document.getElementById('pin-err');
+  if (err) { err.style.opacity = '0'; }
+}
+
+// Camouflaged version button — click counter
+let vClicks = 0;
+function trySecret(el) {
+  vClicks++;
+  if (vClicks >= 3) {
+    vClicks = 0;
+    sw('secret', null);
+  }
+}
+
+buildPhases();
+</script>
+</body>
+</html>
