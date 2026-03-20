@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Bad Boys Shift</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a0f;font-family:'Arial Black',Arial,sans-serif;color:#e5e7eb}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#0a0a0f}
+::-webkit-scrollbar-thumb{background:rgba(239,68,68,.4);border-radius:3px}
+input::placeholder{color:#4b5563}
+input:focus{outline:none}
+button:focus{outline:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+
+/* ── Constants ── */
+const CYCLE  =["Α","Π","Ν","αα","Ρ","Ρ"];
+const SHIFTS =["Α","Π","Ν","αα","Ρ","Ά"];
+const SLABELS={Α:"Απογευματινή",Π:"Πρωινή",Ν:"Νυχτερινή",αα:"Αδιάθετο",Ρ:"Ρεπό",Ά:"Άδεια"};
+const SDOT   ={Α:"#fbbf24",Π:"#38bdf8",Ν:"#a78bfa",αα:"#c084fc",Ρ:"#34d399",Ά:"#fb7185"};
+const SBG    ={Α:"rgba(146,64,14,.5)",Π:"rgba(14,116,144,.5)",Ν:"rgba(91,33,182,.5)",αα:"rgba(107,33,168,.5)",Ρ:"rgba(6,78,59,.5)",Ά:"rgba(159,18,57,.5)"};
+const MONTH_N=["Ιανουάριος","Φεβρουάριος","Μάρτιος","Απρίλιος","Μάιος","Ιούνιος","Ιούλιος","Αύγουστος","Σεπτέμβριος","Οκτώβριος","Νοέμβριος","Δεκέμβριος"];
+const DAY_N  =["ΚΥΡ","ΔΕΥ","ΤΡΙ","ΤΕΤ","ΠΕΜ","ΠΑΡ","ΣΑΒ"];
+
+const getDays =(y,m)=>new Date(y,m+1,0).getDate();
+const mkey    =(y,m)=>`${y}-${String(m+1).padStart(2,"0")}`;
+const prevMkey=(y,m)=>m===0?mkey(y-1,11):mkey(y,m-1);
+
+/* ── localStorage ── */
+const lsGet=k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+
+/* ── Badge style helper ── */
+const badge=s=>({
+  display:"inline-block",padding:"3px 6px",borderRadius:5,
+  fontSize:11,fontWeight:900,letterSpacing:.5,
+  background:SBG[s],color:SDOT[s],border:`1px solid ${SDOT[s]}44`
+});
+
+/* ── Scheduler ──
+   Κύκλος: Α→Π→Ν→αα→Ρ→Ρ (6 βήματα)
+   - Κάθε μέρα η φάση προχωρά κατά 1
+   - Σε άδεια (Ά) η φάση ΔΕΝ προχωρά
+   - Οι φάσεις αποθηκεύονται και μεταφέρονται στον επόμενο μήνα
+── */
+function generateMonth(members,year,month,prefs,prevPhases){
+  const days=getDays(year,month);
+  const phases={};
+  if(prevPhases){
+    members.forEach(m=>{phases[m.id]=prevPhases[m.id]??0});
+  } else {
+    // First time: stagger members evenly around the cycle
+    members.forEach((m,i)=>{phases[m.id]=i%6});
+  }
+
+  const sched={};
+  members.forEach(m=>{sched[m.id]={}});
+
+  const leaveSet={};
+  members.forEach(m=>{leaveSet[m.id]=new Set(prefs[m.id]?.leaves||[])});
+
+  for(let d=1;d<=days;d++){
+    members.forEach(m=>{
+      const onLeave=leaveSet[m.id].has(d);
+      sched[m.id][d]=onLeave?"Ά":CYCLE[phases[m.id]];
+      if(!onLeave) phases[m.id]=(phases[m.id]+1)%6;
+    });
+  }
+  return {sched,endPhases:{...phases}};
+}
+
+/* ── Validation ── */
+function validate(members,sched,days,month){
+  const w=[];
+  members.forEach(m=>{
+    for(let d=1;d<days;d++){
+      if(sched[m.id]?.[d]==="Ν"&&sched[m.id]?.[d+1]!=="αα")
+        w.push(`${m.name}: Ν στις ${d}/${month+1} χωρίς αα`);
+    }
+  });
+  for(let d=1;d<=days;d++){
+    const ol=members.filter(m=>sched[m.id]?.[d]==="Ά").length;
+    if(ol>2) w.push(`${d}/${month+1}: ${ol} σε άδεια (max 2)`);
+    ["Π","Α","Ν"].forEach(s=>{
+      const cnt=members.filter(m=>sched[m.id]?.[d]===s).length;
+      if(cnt!==1) w.push(`${d}/${month+1}: ${cnt}×${s} (πρέπει 1)`);
+    });
+  }
+  return w;
+}
+
+/* ── App ── */
+function App(){
+  const today=new Date();
+  const [year, setYear] =useState(today.getFullYear());
+  const [month,setMonth]=useState(today.getMonth());
+  const [members, setMembers] =useState(()=>lsGet("bb3_members")||[]);
+  const [schedule,setSchedule]=useState({});
+  const [prefs,   setPrefs]   =useState({});
+  const [phases,  setPhases]  =useState(()=>lsGet("bb3_phases")||{});
+  const [tab,     setTab]     =useState("schedule");
+  const [activeCell,setActiveCell]=useState(null);
+  const [newName,   setNewName]   =useState("");
+  const [prefMember,setPrefMember]=useState(null);
+  const [prefType,  setPrefType]  =useState("leaves");
+  const [saveMsg,   setSaveMsg]   =useState("");
+
+  const mk =mkey(year,month);
+  const pmk=prevMkey(year,month);
+  const days=getDays(year,month);
+
+  useEffect(()=>{
+    setSchedule(lsGet(`bb3_sched_${mk}`)||{});
+    setPrefs(lsGet(`bb3_prefs_${mk}`)||{});
+  },[mk]);
+
+  const flash=()=>{setSaveMsg("SAVED ✓");setTimeout(()=>setSaveMsg(""),1500)};
+
+  const persistSched  =s=>{lsSet(`bb3_sched_${mk}`,s);flash()};
+  const persistPrefs  =p=>{lsSet(`bb3_prefs_${mk}`,p)};
+  const persistMembers=m=>{lsSet("bb3_members",m)};
+  const persistPhases =p=>{lsSet("bb3_phases",p)};
+
+  const getShift=(mid,d)=>schedule[mid]?.[d]??"";
+
+  const setShift=(mid,d,val)=>{
+    const ns={...schedule,[mid]:{...(schedule[mid]||{}),[d]:val}};
+    setSchedule(ns);persistSched(ns);setActiveCell(null);
+  };
+
+  const addMember=()=>{
+    const name=newName.trim();if(!name)return;
+    const m=[...members,{id:Date.now().toString(),name}];
+    setMembers(m);persistMembers(m);setNewName("");
+  };
+  const removeMember=id=>{
+    const m=members.filter(x=>x.id!==id);
+    setMembers(m);persistMembers(m);
+  };
+
+  const togglePref=(mid,day,type)=>{
+    const cur=prefs[mid]||{leaves:[],dayoffs:[]};
+    const list=[...(cur[type]||[])];
+    const idx=list.indexOf(day);
+    if(idx===-1)list.push(day);else list.splice(idx,1);
+    const np={...prefs,[mid]:{...cur,[type]:list}};
+    setPrefs(np);persistPrefs(np);
+  };
+  const hasPref=(mid,day,type)=>(prefs[mid]?.[type]||[]).includes(day);
+
+  const generate=()=>{
+    const prevPh=phases[pmk]||null;
+    const {sched,endPhases}=generateMonth(members,year,month,prefs,prevPh);
+    setSchedule(sched);persistSched(sched);
+    const np={...phases,[mk]:endPhases};
+    setPhases(np);persistPhases(np);
+  };
+
+  const clearSched=()=>{setSchedule({});persistSched({})};
+
+  const getStats=mid=>{
+    const c={Α:0,Π:0,Ν:0,αα:0,Ρ:0,Ά:0,total:0};
+    for(let d=1;d<=days;d++){
+      const s=getShift(mid,d);
+      if(s&&c[s]!==undefined)c[s]++;
+      if(["Π","Α","Ν"].includes(s))c.total++;
+    }
+    return c;
+  };
+
+  const warnings=validate(members,schedule,days,month);
+  const getDayName=d=>DAY_N[new Date(year,month,d).getDay()];
+  const isWeekend =d=>[0,6].includes(new Date(year,month,d).getDay());
+  const isToday   =d=>d===today.getDate()&&month===today.getMonth()&&year===today.getFullYear();
+  const prevM=()=>{if(month===0){setMonth(11);setYear(y=>y-1)}else setMonth(m=>m-1)};
+  const nextM=()=>{if(month===11){setMonth(0);setYear(y=>y+1)}else setMonth(m=>m+1)};
+
+  useEffect(()=>{
+    const h=()=>setActiveCell(null);
+    document.addEventListener("click",h);
+    return()=>document.removeEventListener("click",h);
+  },[]);
+
+  /* ── Button styles ── */
+  const redBtn={background:"linear-gradient(135deg,#ef4444,#b91c1c)",border:"none",color:"#fff",padding:"10px 24px",borderRadius:8,cursor:"pointer",fontWeight:900,fontSize:12,letterSpacing:3,textTransform:"uppercase",boxShadow:"0 0 20px rgba(239,68,68,.4)"};
+  const ghostBtn={background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.3)",color:"#f87171",padding:"10px 18px",borderRadius:8,cursor:"pointer",fontWeight:900,fontSize:12,letterSpacing:2,textTransform:"uppercase"};
+  const card={background:"rgba(13,13,20,.8)",border:"1px solid rgba(239,68,68,.2)",borderRadius:12,padding:20};
+
+  const TABS=[["schedule","📅 ΠΡΟΓΡΑΜΜΑ"],["prefs","🎯 ΕΠΙΘΥΜΙΕΣ"],["stats","📊 ΣΤΑΤΙΣΤΙΚΑ"],["settings","⚙️ ΡΥΘΜΙΣΕΙΣ"]];
+
+  return(
+  <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#0a0a0f,#12060f 50%,#0a0a14)"}}>
+
+    {/* Glows */}
+    <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0,overflow:"hidden"}}>
+      <div style={{position:"absolute",top:"-20%",left:"-10%",width:600,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(239,68,68,.08),transparent 70%)"}}/>
+      <div style={{position:"absolute",bottom:"-20%",right:"-10%",width:500,height:500,borderRadius:"50%",background:"radial-gradient(circle,rgba(99,102,241,.07),transparent 70%)"}}/>
+    </div>
+
+    {/* Header */}
+    <div style={{position:"sticky",top:0,zIndex:50,background:"rgba(10,10,15,.96)",borderBottom:"1px solid rgba(239,68,68,.3)",backdropFilter:"blur(12px)"}}>
+      <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <span style={{fontSize:28,filter:"drop-shadow(0 0 12px rgba(239,68,68,.8))"}}>🔫</span>
+          <div>
+            <div style={{fontSize:18,fontWeight:900,letterSpacing:3,color:"#ef4444",textShadow:"0 0 20px rgba(239,68,68,.6)",textTransform:"uppercase"}}>Bad Boys Shift</div>
+            <div style={{fontSize:10,letterSpacing:3,color:"#6b7280",textTransform:"uppercase"}}>{MONTH_N[month]} {year}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <button onClick={prevM} style={{...ghostBtn,padding:"6px 12px",fontSize:16}}>‹</button>
+          <span style={{fontSize:13,fontWeight:900,letterSpacing:2,color:"#f87171",minWidth:160,textAlign:"center"}}>{MONTH_N[month].toUpperCase()} {year}</span>
+          <button onClick={nextM} style={{...ghostBtn,padding:"6px 12px",fontSize:16}}>›</button>
+          {saveMsg&&<span style={{color:"#34d399",fontSize:11,fontWeight:900,letterSpacing:2}}>{saveMsg}</span>}
+        </div>
+      </div>
+      <div style={{display:"flex",borderTop:"1px solid rgba(239,68,68,.15)",overflowX:"auto"}}>
+        {TABS.map(([id,lbl])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{flex:"0 0 auto",padding:"10px 20px",fontSize:11,fontWeight:900,letterSpacing:2,textTransform:"uppercase",border:"none",cursor:"pointer",background:tab===id?"rgba(239,68,68,.15)":"transparent",color:tab===id?"#ef4444":"#6b7280",borderBottom:tab===id?"2px solid #ef4444":"2px solid transparent"}}>{lbl}</button>
+        ))}
+      </div>
+    </div>
+
+    <div style={{position:"relative",zIndex:1,padding:16}}>
+
+      {/* Warnings */}
+      {warnings.length>0&&(
+        <div style={{marginBottom:16,padding:12,borderRadius:8,background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.3)"}}>
+          <div style={{color:"#ef4444",fontWeight:900,fontSize:12,letterSpacing:2,marginBottom:6}}>⚠️ ΠΑΡΑΒΙΑΣΕΙΣ</div>
+          {warnings.map((w,i)=><div key={i} style={{color:"#fca5a5",fontSize:11,marginBottom:2}}>{w}</div>)}
+        </div>
+      )}
+
+      {/* ══ SCHEDULE ══ */}
+      {tab==="schedule"&&(<>
+        <div style={{marginBottom:16,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          <button onClick={generate} style={redBtn}>🔄 ΔΗΜΙΟΥΡΓΙΑ ΠΡΟΓΡΑΜΜΑΤΟΣ</button>
+          <button onClick={clearSched} style={ghostBtn}>🗑 ΚΑΘΑΡΙΣΜΟΣ</button>
+          {!phases[pmk]&&members.length>0&&(
+            <span style={{fontSize:11,color:"#f59e0b",background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)",padding:"6px 10px",borderRadius:6}}>
+              ⚠️ Χωρίς φάσεις προηγούμενου μήνα — εκκίνηση από μηδέν
+            </span>
+          )}
+        </div>
+
+        {/* Cycle legend */}
+        <div style={{marginBottom:12,padding:"8px 12px",borderRadius:8,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.07)",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:10,color:"#6b7280",letterSpacing:2,textTransform:"uppercase"}}>Κύκλος:</span>
+          {CYCLE.map((s,i)=>(
+            <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+              <span style={badge(s)}>{s}</span>
+              {i<CYCLE.length-1&&<span style={{color:"#374151",fontSize:12}}>→</span>}
+            </span>
+          ))}
+        </div>
+
+        {members.length===0?(
+          <div style={{textAlign:"center",padding:60,background:"rgba(239,68,68,.05)",borderRadius:12,border:"1px solid rgba(239,68,68,.2)"}}>
+            <div style={{fontSize:48,marginBottom:12}}>👥</div>
+            <div style={{color:"#ef4444",fontWeight:900,fontSize:16,letterSpacing:3,marginBottom:16}}>ΔΕΝ ΥΠΑΡΧΟΥΝ ΜΕΛΗ</div>
+            <button onClick={()=>setTab("settings")} style={redBtn}>ΡΥΘΜΙΣΕΙΣ →</button>
+          </div>
+        ):(
+          <div style={{overflowX:"auto",borderRadius:12,border:"1px solid rgba(239,68,68,.2)"}}>
+            <table style={{borderCollapse:"collapse",minWidth:Math.max(700,140+days*46)}}>
+              <thead>
+                <tr style={{background:"rgba(10,10,15,.9)"}}>
+                  <th style={{position:"sticky",left:0,zIndex:15,padding:"12px 16px",textAlign:"left",fontSize:11,letterSpacing:3,color:"#ef4444",fontWeight:900,textTransform:"uppercase",background:"#0d0d14",borderBottom:"1px solid rgba(239,68,68,.3)",borderRight:"1px solid rgba(239,68,68,.2)",minWidth:140}}>ΜΕΛΟΣ</th>
+                  {Array.from({length:days},(_,i)=>i+1).map(d=>(
+                    <th key={d} style={{padding:"8px 4px",textAlign:"center",minWidth:46,fontSize:10,fontWeight:900,
+                      background:isToday(d)?"rgba(239,68,68,.3)":isWeekend(d)?"rgba(99,102,241,.1)":"rgba(10,10,15,.9)",
+                      color:isToday(d)?"#fca5a5":isWeekend(d)?"#818cf8":"#9ca3af",
+                      borderBottom:isToday(d)?"2px solid #ef4444":"1px solid rgba(239,68,68,.2)",
+                      borderRight:"1px solid rgba(239,68,68,.1)"}}>
+                      <div>{d}</div>
+                      <div style={{fontSize:9,opacity:.7,fontWeight:400}}>{getDayName(d)}</div>
+                    </th>
+                  ))}
+                  <th style={{padding:"12px 8px",textAlign:"center",fontSize:11,letterSpacing:2,color:"#ef4444",fontWeight:900,background:"rgba(10,10,15,.9)",borderBottom:"1px solid rgba(239,68,68,.3)",minWidth:52}}>ΣΥΝ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((member,mi)=>{
+                  const stats=getStats(member.id);
+                  return(
+                    <tr key={member.id} style={{background:mi%2===0?"rgba(15,15,22,.8)":"rgba(10,10,18,.6)"}}>
+                      <td style={{position:"sticky",left:0,zIndex:10,padding:"10px 16px",fontWeight:900,fontSize:13,background:mi%2===0?"#0d0d14":"#0b0b12",borderRight:"1px solid rgba(239,68,68,.2)",borderBottom:"1px solid rgba(239,68,68,.1)",color:"#f3f4f6",whiteSpace:"nowrap"}}>
+                        <span style={{display:"inline-flex",alignItems:"center",gap:6}}>
+                          <span style={{width:6,height:6,borderRadius:"50%",background:"#ef4444",boxShadow:"0 0 6px #ef4444",display:"inline-block",flexShrink:0}}/>
+                          {member.name}
+                        </span>
+                      </td>
+                      {Array.from({length:days},(_,i)=>i+1).map(d=>{
+                        const shift=getShift(member.id,d);
+                        const isActive=activeCell?.memberId===member.id&&activeCell?.day===d;
+                        return(
+                          <td key={d} style={{padding:"4px 3px",textAlign:"center",cursor:"pointer",position:"relative",borderRight:"1px solid rgba(239,68,68,.08)",borderBottom:"1px solid rgba(239,68,68,.1)",background:isWeekend(d)?"rgba(99,102,241,.04)":"transparent",minWidth:46}}
+                            onClick={e=>{e.stopPropagation();setActiveCell(isActive?null:{memberId:member.id,day:d})}}>
+                            {shift
+                              ?<span style={badge(shift)}>{shift}</span>
+                              :<span style={{color:"rgba(107,114,128,.4)",fontSize:12}}>—</span>
+                            }
+                            {isActive&&(
+                              <div style={{position:"absolute",top:"calc(100% + 4px)",left:"50%",transform:"translateX(-50%)",zIndex:100,background:"rgba(13,13,20,.98)",border:"1px solid rgba(239,68,68,.4)",borderRadius:10,padding:10,display:"flex",flexWrap:"wrap",gap:5,minWidth:170,boxShadow:"0 8px 32px rgba(0,0,0,.8)"}}
+                                onClick={e=>e.stopPropagation()}>
+                                <div style={{width:"100%",fontSize:9,letterSpacing:2,color:"#6b7280",fontWeight:900,marginBottom:3}}>ΕΠΙΛΟΓΗ</div>
+                                {SHIFTS.map(s=>(
+                                  <button key={s} onClick={()=>setShift(member.id,d,s)}
+                                    style={{...badge(s),cursor:"pointer",padding:"5px 9px",outline:shift===s?"2px solid #ef4444":"none"}}>
+                                    {s}
+                                  </button>
+                                ))}
+                                <button onClick={()=>setShift(member.id,d,"")}
+                                  style={{padding:"5px 9px",borderRadius:6,fontSize:11,fontWeight:900,cursor:"pointer",background:"rgba(107,114,128,.2)",border:"1px solid rgba(107,114,128,.4)",color:"#9ca3af"}}>✕</button>
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td style={{padding:"10px 8px",textAlign:"center",fontWeight:900,fontSize:14,color:"#ef4444",textShadow:"0 0 10px rgba(239,68,68,.5)",borderBottom:"1px solid rgba(239,68,68,.1)"}}>{stats.total}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div style={{marginTop:16,display:"flex",flexWrap:"wrap",gap:8}}>
+          {SHIFTS.map(s=>(
+            <span key={s} style={{...badge(s),display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:20}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:SDOT[s],boxShadow:`0 0 6px ${SDOT[s]}`,display:"inline-block"}}/>
+              {s} – {SLABELS[s]}
+            </span>
+          ))}
+        </div>
+      </>)}
+
+      {/* ══ PREFS ══ */}
+      {tab==="prefs"&&(
+        <div>
+          <div style={{marginBottom:20}}>
+            <div style={{color:"#ef4444",fontWeight:900,fontSize:14,letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>🎯 Επιθυμίες Μελών</div>
+            <div style={{color:"#6b7280",fontSize:12}}>Σημειώστε ποιες μέρες θέλει κάθε μέλος άδεια. Η φάση ΔΕΝ προχωρά σε ημέρες άδειας.</div>
+          </div>
+          {members.length===0
+            ?<div style={{textAlign:"center",padding:40,color:"#6b7280"}}>Προσθέστε πρώτα μέλη.</div>
+            :(<>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+                {members.map(m=>(
+                  <button key={m.id} onClick={()=>setPrefMember(prefMember?.id===m.id?null:m)}
+                    style={{padding:"8px 16px",borderRadius:8,cursor:"pointer",fontWeight:900,fontSize:12,letterSpacing:2,textTransform:"uppercase",
+                      background:prefMember?.id===m.id?"linear-gradient(135deg,#ef4444,#b91c1c)":"rgba(239,68,68,.08)",
+                      color:prefMember?.id===m.id?"white":"#f87171",
+                      border:prefMember?.id===m.id?"none":"1px solid rgba(239,68,68,.3)",
+                      boxShadow:prefMember?.id===m.id?"0 0 20px rgba(239,68,68,.4)":"none"}}>
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+
+              {prefMember&&(<>
+                <div style={{display:"flex",gap:8,marginBottom:12}}>
+                  {[["leaves","🏖️ ΑΔΕΙΑ","#fb7185"],["dayoffs","💤 ΡΕΠΟ","#34d399"]].map(([type,lbl,col])=>(
+                    <button key={type} onClick={()=>setPrefType(type)}
+                      style={{padding:"8px 20px",borderRadius:8,cursor:"pointer",fontWeight:900,fontSize:12,letterSpacing:2,
+                        background:prefType===type?col:"rgba(255,255,255,.05)",
+                        color:prefType===type?"#0a0a0f":col,
+                        border:`1px solid ${prefType===type?col:"rgba(255,255,255,.1)"}`,
+                        boxShadow:prefType===type?`0 0 15px ${col}66`:"none"}}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+                <div style={{marginBottom:12,fontSize:12,color:"#9ca3af"}}>
+                  <span style={{color:"#fb7185",fontWeight:900}}>{(prefs[prefMember.id]?.leaves||[]).length}</span> ημέρες άδειας &nbsp;|&nbsp;
+                  <span style={{color:"#34d399",fontWeight:900}}>{(prefs[prefMember.id]?.dayoffs||[]).length}</span> επιθυμητά ρεπό
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(44px,1fr))",gap:6,maxWidth:360}}>
+                  {DAY_N.map(dn=><div key={dn} style={{textAlign:"center",fontSize:9,fontWeight:900,letterSpacing:2,color:"#6b7280",padding:"4px 0"}}>{dn}</div>)}
+                  {Array.from({length:(()=>{const d=new Date(year,month,1).getDay();return d===0?6:d-1})()}).map((_,i)=><div key={`o${i}`}/>)}
+                  {Array.from({length:days},(_,i)=>i+1).map(d=>{
+                    const isL=hasPref(prefMember.id,d,"leaves");
+                    const isDO=hasPref(prefMember.id,d,"dayoffs");
+                    const active=prefType==="leaves"?isL:isDO;
+                    const other=prefType==="leaves"?isDO:isL;
+                    return(
+                      <button key={d} onClick={()=>togglePref(prefMember.id,d,prefType)}
+                        style={{padding:"8px 4px",borderRadius:8,cursor:"pointer",fontWeight:900,fontSize:13,textAlign:"center",transition:"all .2s",position:"relative",
+                          background:active?(prefType==="leaves"?"rgba(251,113,133,.3)":"rgba(52,211,153,.3)"):isWeekend(d)?"rgba(99,102,241,.08)":"rgba(255,255,255,.04)",
+                          color:active?(prefType==="leaves"?"#fb7185":"#34d399"):isToday(d)?"#ef4444":"#e5e7eb",
+                          outline:active?`1px solid ${prefType==="leaves"?"rgba(251,113,133,.5)":"rgba(52,211,153,.5)"}`:"1px solid rgba(255,255,255,.06)",
+                          transform:active?"scale(1.05)":"scale(1)"}}>
+                        {d}
+                        {other&&<span style={{position:"absolute",bottom:2,right:2,width:4,height:4,borderRadius:"50%",background:prefType==="leaves"?"#34d399":"#fb7185"}}/>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{marginTop:16}}>
+                  <button onClick={()=>{const np={...prefs,[prefMember.id]:{leaves:[],dayoffs:[]}};setPrefs(np);persistPrefs(np);}} style={ghostBtn}>
+                    🗑 ΚΑΘΑΡΙΣΜΟΣ ΕΠΙΘΥΜΙΩΝ
+                  </button>
+                </div>
+              </>)}
+              {!prefMember&&<div style={{textAlign:"center",padding:40,color:"#4b5563",fontSize:13}}>Επιλέξτε μέλος</div>}
+            </>)
+          }
+        </div>
+      )}
+
+      {/* ══ STATS ══ */}
+      {tab==="stats"&&(
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:16,marginBottom:16}}>
+            {members.map(member=>{
+              const st=getStats(member.id);
+              return(
+                <div key={member.id} style={card}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,paddingBottom:10,borderBottom:"1px solid rgba(239,68,68,.2)"}}>
+                    <span style={{width:8,height:8,borderRadius:"50%",background:"#ef4444",boxShadow:"0 0 8px #ef4444",display:"inline-block",flexShrink:0}}/>
+                    <span style={{fontWeight:900,fontSize:14,color:"#f3f4f6"}}>{member.name}</span>
+                    <span style={{marginLeft:"auto",fontWeight:900,fontSize:18,color:"#ef4444",textShadow:"0 0 10px rgba(239,68,68,.5)"}}>{st.total}</span>
+                  </div>
+                  {SHIFTS.map(s=>(
+                    <div key={s} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                      <span style={{...badge(s),display:"inline-flex",alignItems:"center",gap:6,padding:"2px 8px",borderRadius:12,fontSize:11}}>
+                        <span style={{width:5,height:5,borderRadius:"50%",background:SDOT[s],display:"inline-block"}}/>{s} {SLABELS[s]}
+                      </span>
+                      <span style={{fontWeight:900,fontSize:16,color:st[s]>0?SDOT[s]:"#4b5563",textShadow:st[s]>0?`0 0 8px ${SDOT[s]}66`:"none"}}>{st[s]}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+          <div style={card}>
+            <div style={{fontWeight:900,fontSize:12,letterSpacing:3,color:"#ef4444",marginBottom:12,textTransform:"uppercase"}}>Άδειες ανά ημέρα</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {Array.from({length:days},(_,i)=>i+1).map(d=>{
+                const ol=members.filter(m=>getShift(m.id,d)==="Ά").length;
+                return(
+                  <div key={d} style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 8px",borderRadius:8,minWidth:36,
+                    background:ol>2?"rgba(239,68,68,.3)":ol===2?"rgba(251,191,36,.15)":ol===1?"rgba(251,113,133,.1)":"rgba(255,255,255,.03)",
+                    border:ol>2?"1px solid rgba(239,68,68,.6)":ol>0?"1px solid rgba(251,113,133,.3)":"1px solid rgba(255,255,255,.05)"}}>
+                    <span style={{fontSize:11,fontWeight:900,color:ol>2?"#fca5a5":"#9ca3af"}}>{d}</span>
+                    <span style={{fontSize:10,color:ol>0?"#fb7185":"#4b5563"}}>{ol>0?`${ol}Ά`:"·"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ SETTINGS ══ */}
+      {tab==="settings"&&(
+        <div style={{maxWidth:500,display:"flex",flexDirection:"column",gap:20}}>
+          <div style={card}>
+            <div style={{fontWeight:900,fontSize:13,letterSpacing:3,color:"#ef4444",marginBottom:16,textTransform:"uppercase"}}>👥 Μέλη Ομάδας</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+              {members.map(m=>(
+                <div key={m.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:8,background:"rgba(239,68,68,.05)",border:"1px solid rgba(239,68,68,.15)"}}>
+                  <span style={{display:"flex",alignItems:"center",gap:8,fontWeight:700,fontSize:13}}>
+                    <span style={{width:6,height:6,borderRadius:"50%",background:"#ef4444",boxShadow:"0 0 6px #ef4444",display:"inline-block"}}/>
+                    {m.name}
+                  </span>
+                  <button onClick={()=>removeMember(m.id)} style={{...ghostBtn,padding:"4px 12px",fontSize:11}}>ΑΦΑΙΡΕΣΗ</button>
+                </div>
+              ))}
+              {members.length===0&&<div style={{color:"#6b7280",fontSize:12,textAlign:"center",padding:16}}>Δεν υπάρχουν μέλη.</div>}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addMember()}
+                placeholder="Όνομα νέου μέλους..."
+                style={{flex:1,padding:"10px 14px",borderRadius:8,background:"rgba(255,255,255,.05)",border:"1px solid rgba(239,68,68,.3)",color:"#f3f4f6",fontSize:13,fontFamily:"inherit"}}/>
+              <button onClick={addMember} style={redBtn}>+ ΠΡΟΣΘΗΚΗ</button>
+            </div>
+          </div>
+
+          <div style={{...card,border:"1px solid rgba(245,158,11,.2)"}}>
+            <div style={{fontWeight:900,fontSize:13,letterSpacing:3,color:"#f59e0b",marginBottom:8,textTransform:"uppercase"}}>🔄 Φάσεις Κύκλου</div>
+            <div style={{fontSize:12,color:"#9ca3af",marginBottom:12}}>
+              Αποθηκεύονται αυτόματα και μεταφέρονται στον επόμενο μήνα.
+              {phases[mk]&&<span style={{color:"#34d399",display:"block",marginTop:4}}>✓ Υπάρχουν φάσεις για αυτόν τον μήνα.</span>}
+              {!phases[pmk]&&<span style={{color:"#f59e0b",display:"block",marginTop:4}}>⚠️ Δεν υπάρχουν φάσεις από τον προηγούμενο μήνα.</span>}
+            </div>
+            <button onClick={()=>{const np={...phases};delete np[mk];setPhases(np);persistPhases(np);setSaveMsg("Reset ✓");setTimeout(()=>setSaveMsg(""),1500)}}
+              style={{...ghostBtn,color:"#f59e0b",border:"1px solid rgba(245,158,11,.3)",background:"rgba(245,158,11,.08)"}}>
+              🗑 RESET ΦΑΣΕΩΝ ΤΡΕΧΟΝΤΟΣ ΜΗΝΑ
+            </button>
+          </div>
+
+          <div style={card}>
+            <div style={{fontWeight:900,fontSize:13,letterSpacing:3,color:"#ef4444",marginBottom:12,textTransform:"uppercase"}}>📖 Κανονισμοί</div>
+            <div style={{padding:"8px 10px",borderRadius:8,background:"rgba(239,68,68,.05)",border:"1px solid rgba(239,68,68,.1)",marginBottom:10,fontSize:12,color:"#f3f4f6"}}>
+              <span style={{fontWeight:900}}>Κύκλος: </span>Α → Π → Ν → αα → Ρ → Ρ → (επανάληψη)
+            </div>
+            {[["Π – Πρωινή","06:00–14:00","#38bdf8"],["Α – Απογευματινή","14:00–22:00","#fbbf24"],["Ν – Νυχτερινή","22:00–06:00","#a78bfa"],["αα – Αδιάθετο","Πάντα μετά από Ν","#c084fc"],["Ρ – Ρεπό","×2 στον κύκλο","#34d399"],["Ά – Άδεια","Max 2 ταυτόχρονα","#fb7185"]].map(([lbl,desc,col])=>(
+              <div key={lbl} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 10px",borderRadius:8,background:"rgba(255,255,255,.02)",border:"1px solid rgba(255,255,255,.05)",marginBottom:4,fontSize:12}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:col,boxShadow:`0 0 6px ${col}`,display:"inline-block",flexShrink:0}}/>
+                <span style={{fontWeight:900,color:"#e5e7eb",minWidth:150}}>{lbl}</span>
+                <span style={{color:"#9ca3af"}}>{desc}</span>
+              </div>
+            ))}
+            <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid rgba(239,68,68,.15)",display:"flex",flexDirection:"column",gap:4,fontSize:12,color:"#9ca3af"}}>
+              {["Σε άδεια: φάση ΔΕΝ προχωρά","Κύκλος συνεχίζεται από μήνα σε μήνα","1 άτομο ανά βάρδια (Π, Α, Ν)","Max 2 άδειες ταυτόχρονα"].map(r=>(
+                <div key={r} style={{display:"flex",gap:8}}><span style={{color:"#ef4444",flexShrink:0}}>▸</span><span>{r}</span></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
