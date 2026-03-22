@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>~/grigoris — console</title>
+  <meta name="color-scheme" content="dark light" />
+  <meta name="theme-color" content="#0a0f14" />
+  <style>
+    :root{
+      --bg:#0a0f14; --bg-2:#0f141a; --fg:#cde8cf; --fg-dim:#88a088;
+      --accent:#38ef7d; --error:#ff6b6b; --window:#0b1219;
+      --border:#1f2937; --shadow:0 20px 60px rgba(0,0,0,.5);
+      --warn:#fbbf24; --info:#60a5fa;
+    }
+    @media (prefers-color-scheme: light){
+      :root{ --bg:#f2f7f3; --bg-2:#eaf1ed; --fg:#0f1a12; --fg-dim:#2b3a2e; --window:#ffffff; --border:#cbd5e1 }
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{
+      margin:0;color:var(--fg);
+      background: radial-gradient(1400px 800px at 50% -10%,#38ef7d14,transparent),
+        radial-gradient(1000px 600px at 120% 20%,#19a06b1a,transparent),
+        linear-gradient(180deg,var(--bg),var(--bg-2));
+      font:15px/1.55 "Lucida Console","Courier New",ui-monospace,Menlo,Consolas,monospace;
+      overflow:hidden
+    }
+    .panel{
+      position:fixed;inset:auto 0 0 0;
+      height:calc(36px + env(safe-area-inset-bottom));
+      padding-bottom:env(safe-area-inset-bottom);
+      background:linear-gradient(180deg,#0d151c,#0b1218);
+      border-top:1px solid var(--border);
+      display:flex;align-items:center;gap:8px;padding:0 10px;z-index:50
+    }
+    .panel .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+    .panel .dock{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+    .panel .dock::-webkit-scrollbar{display:none}
+    .badge{padding:3px 8px;border:1px solid var(--border);border-radius:999px;color:var(--fg-dim);background:#0c141b;cursor:pointer}
+    .badge.min{opacity:.6}
+    #boot{position:fixed;inset:0;display:grid;place-items:center;z-index:100}
+    .crt{
+      position:relative;width:min(920px,95vw);height:min(540px,70vh);
+      background:#020507;border:1px solid #0b2513;border-radius:12px;
+      box-shadow:var(--shadow),inset 0 0 60px #0a2013;overflow:hidden
+    }
+    .crt::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(180deg,transparent 0 1px,rgba(26,255,90,.2) 2px 3px)}
+    .crt::after{content:"";position:absolute;inset:0;background:radial-gradient(60% 80% at 50% 20%,rgba(26,255,90,.05),transparent 60%)}
+    .bootlog{padding:18px;color:#b7ffcc;font-size:14px;white-space:pre-wrap;overflow:auto;height:100%}
+    #desktop{position:fixed;inset:0 0 36px 0;overflow:hidden}
+    .workspace{position:absolute;inset:0;padding:18px}
+    .win{
+      position:absolute;background:linear-gradient(180deg,#0b141c,#091018);
+      border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);
+      color:var(--fg);min-width:320px;min-height:200px;overflow:hidden;
+      transform:scale(.98);opacity:0;transition:transform .2s,opacity .2s
+    }
+    .win.in{transform:scale(1);opacity:1}
+    .win.dragging{transition:none}
+    .win{will-change:auto}
+    .titlebar{
+      display:flex;align-items:center;justify-content:space-between;gap:8px;
+      padding:6px 8px;background:#0c151d;border-bottom:1px solid var(--border);
+      cursor:move;user-select:none;-webkit-user-select:none;touch-action:none
+    }
+    .controls{display:flex;gap:6px}
+    .btn{width:12px;height:12px;border-radius:50%;border:1px solid #1f2a33;cursor:pointer}
+    .btn.close{background:#ff5f56}.btn.min{background:#ffbd2e}.btn.max{background:#27c93f}
+    .title{font-weight:700;letter-spacing:.02em;color:var(--fg-dim)}
+    .content{
+      padding:10px;
+      background:conic-gradient(from .75turn,#09131a,#081018 30%,#070e15 60%,#0a141b);
+      height:calc(100% - 34px);overflow:auto
+    }
+    .term{font-size:14px;line-height:1.55;white-space:pre-wrap;user-select:none}
+    .cmd{user-select:text}
+    .term .line:not(:last-child) [data-cmd]{pointer-events:none;user-select:none}
+    .term .line .alink{pointer-events:auto!important;user-select:none;cursor:pointer}
+    .line{position:relative}
+    .prompt{color:#a7f3d0}.path{color:#93c5fd}.[data-cmd]{color:#e5e7eb}
+    .out{color:#9ab4a0}.err{color:var(--error)}.hl{color:#e3ffa8}
+    .warn-line{color:var(--warn)}.info-line{color:var(--info)}
+    .cursor{display:inline-block;width:9px;height:1.1em;background:#9cffaf;margin-left:2px;vertical-align:-2px;box-shadow:0 0 10px #38ef7d}
+    .term .line .cursor{opacity:.25}
+    .term .line:last-child .cursor{opacity:1;animation:blink 1s steps(1) infinite}
+    @keyframes blink{50%{opacity:0}}
+    .palette{
+      position:fixed;left:50%;top:12%;transform:translateX(-50%);
+      width:min(720px,92vw);background:#0b1219;border:1px solid var(--border);
+      border-radius:12px;box-shadow:var(--shadow);display:none;z-index:70
+    }
+    .palette header{padding:10px 12px;border-bottom:1px solid var(--border)}
+    .palette input{width:100%;padding:10px 12px;border:0;outline:0;background:transparent;color:var(--fg);font:inherit}
+    .palette ul{list-style:none;margin:0;padding:8px}
+    .palette li{padding:10px 12px;border-radius:8px;cursor:pointer}
+    .palette li:hover,.palette li.active{background:#0f1a23}
+    .alink{color:#7ee787;text-decoration:underline;text-decoration-style:dotted;cursor:pointer}
+    .toast{
+      position:fixed;left:50%;bottom:54px;transform:translateX(-50%) translateY(10px);
+      background:#0b161e;border:1px solid var(--border);padding:10px 14px;
+      border-radius:10px;opacity:0;transition:opacity .2s,transform .2s;z-index:80
+    }
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    /* tail -f log stream */
+    .logstream{font-size:12px;line-height:1.6;color:#6b9e74}
+    .logstream .lg-info{color:#60a5fa}.logstream .lg-warn{color:#fbbf24}.logstream .lg-err{color:#ff6b6b}
+    .logstream .lg-ok{color:#38ef7d}
+    /* htop-style */
+    .htop-table{width:100%;border-collapse:collapse;font-size:12px}
+    .htop-table th{color:#38ef7d;text-align:left;border-bottom:1px solid #1f2937;padding:2px 6px}
+    .htop-table td{padding:2px 6px;color:#9ab4a0}
+    .htop-table tr:hover td{background:#0f1a23;color:#cde8cf}
+    .bar-wrap{display:inline-block;width:80px;height:8px;background:#0f1a23;border-radius:2px;vertical-align:middle;margin-left:4px}
+    .bar-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,#38ef7d,#19a06b);transition:width .8s}
+    /* vim overlay */
+    .vim-overlay{
+      position:absolute;inset:0;background:#0a0f0a;z-index:10;display:none;
+      font-size:13px;line-height:1.5;overflow:hidden
+    }
+    .vim-overlay.active{display:flex;flex-direction:column}
+    .vim-body{flex:1;overflow:auto;padding:6px 10px;color:#cde8cf}
+    .vim-statusline{
+      background:#1a2e1a;border-top:1px solid #2d4a2d;
+      padding:2px 10px;color:#38ef7d;font-size:12px;display:flex;justify-content:space-between
+    }
+    .vim-cmdline{background:#0a0f0a;padding:2px 10px;color:#e3ffa8;font-size:13px;min-height:22px}
+    /* git log */
+    .git-hash{color:#f97316}.git-author{color:#818cf8}.git-date{color:#9ab4a0}.git-msg{color:#cde8cf}
+    /* ping */
+    .ping-line{color:#9ab4a0}.ping-stat{color:#38ef7d}
+    /* ai thinking */
+    .ai-thinking{color:#60a5fa;opacity:.8}
+    @keyframes ellipsis{0%{content:''}33%{content:'.'}66%{content:'..'}100%{content:'...'}}
+    .ai-thinking::after{content:'';animation:ellipsis 1s infinite}
+    @media (max-width:768px){
+      body{font-size:14px}.workspace{padding:6px}
+      .badge{padding:6px 10px}.crt{width:95vw;height:60vh}
+      .term{font-size:13px}.btn{width:14px;height:14px}
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <span class="dot"></span>
+    <span style="opacity:.7">console@grigoris:~</span>
+    <div class="dock" id="dock"></div>
+    <div style="margin-left:auto;opacity:.6" id="clock"></div>
+  </div>
+  <div id="boot"><div class="crt"><div class="bootlog" id="bootlog"></div></div></div>
+  <div id="desktop"><div class="workspace" id="space"></div></div>
+  <div class="palette" id="palette">
+    <header>
+      <input id="palInput" placeholder="Type a command… (whoami, experience, ask, git log, htop, vim, tail, ping, ssh…)" />
+    </header>
+    <ul id="palList"></ul>
+  </div>
+  <div class="toast" id="toast">Copied</div>
+
+<script>
+/* ─── DATA ─────────────────────────────────────────────────────────── */
+const ROLES = [
+  {company:'Kaizen Gaming',title:'Team Lead — Ariadne Core',period:'02/2024 – Present',loc:'Athens, Greece',tech:['.NET','C#','Orleans','Kafka','RabbitMQ','PostgreSQL','SQL Server','Gemini','RAG','LLM'],details:['Built & leads squad of 4 BE, 1 FE, 2 QA from scratch — hiring, onboarding, KPIs, 1:1s, conflict resolution.','Owns event/market/odds workflows with audit, history & risk-control automation on .NET Orleans + Kafka.','Delivered Bet Builder Highlights, enhanced odds, Change Event Template Deployment, History Audit redesign.','Driving AI initiative: EOS LLM extension for production incident triage (RAG + Gemini).']},
+  {company:'Datawise / FSchumacher',title:'Lead Software Engineer (Remote)',period:'07/2022 – 05/2024',loc:'Atlanta, USA',tech:['Java','Spring Boot','PostgreSQL','AWS','Outbox'],details:['PDP rework drove +40% engagement and +30% conversion improvement.','Order management performance improved +25%; outbox-based email automation across workflow triggers.','Mentored engineers, led code reviews, improved deployment pipeline.']},
+  {company:'Tymit',title:'Lead Software Engineer — FinTech Credit Platform',period:'10/2020 – 11/2021',loc:'London, UK (Remote)',tech:['Java','Spring Boot','AWS','Graylog','Kibana'],details:['Backend lead for APIs serving iOS/Android/Web; AWS + Graylog/Kibana observability.','Achieved +40% user retention improvement through reliability and performance work.']},
+  {company:'XM',title:'Software Engineer — Trading Platform',period:'05/2020 – 10/2020',loc:'Athens, Greece',tech:['Java 11','Spring Boot','AWS','Docker','Jenkins'],details:['Java 11 + Spring Boot trading backend; concurrency, consistency — 99% uptime.','Partial DevOps: AWS + Docker; Jenkins, Jira, GitHub.']},
+  {company:'Samsung Developers',title:'Software Engineer',period:'2020–2021',loc:'Athens, Greece',tech:['JavaScript','Samsung SDK'],details:['Shipped 10+ Galaxy Watch apps using Samsung JS framework.','~4★ rating; ~$5k passive income/year.']},
+  {company:'Camelot Lottery Solutions',title:'Software Engineer — UK National Lottery',period:'09/2017 – 05/2020',loc:'Athens, Greece',tech:['Java','Spring Boot','SQL','JUnit','Cucumber'],details:['Mission-critical backend — synchronisation, security, zero-fault tolerance.','30% reduction in security vulnerabilities; zero breaches during tenure.','Developer coach — mentorship in Scrum team of 7; multicultural London office.']},
+  {company:'CERN',title:'Software Engineer — Radiation Monitoring',period:'08/2016 – 09/2017',loc:'Geneva, Switzerland',tech:['Java','Spring Boot','PL/SQL','PrimeFaces'],details:['Built Raisin & Sailor web apps — 99% uptime on safety-critical infrastructure.','Multicultural cross-country team; cross-border knowledge sharing.']},
+  {company:'Agile Actors',title:'Software Engineer',period:'2016',loc:'Athens, Greece',tech:['Java','Groovy','Cassandra'],details:['Lottery modules: auth, profiles, verification. 40% fraud reduction, 98% defect detection.']},
+  {company:'GNT Information Systems',title:'Software Engineer',period:'2015–2016',loc:'Athens, Greece',tech:['Java','Liferay','Android','Ionic'],details:['Liferay portal and Android/Ionic app — 30% efficiency gain.']},
+  {company:'NCSR Demokritos',title:'Student Researcher',period:'09/2015 – 03/2017',loc:'Athens, Greece',tech:['Java','Spring','SQL','REST'],details:['Built TAC AdX intelligent agent — 15% bid accuracy increase.','1st Place — International TAC AdX Ad Auctions Competition.']},
+  {company:'Baeldung',title:'Technical Author',period:'2018–2019',loc:'Remote',tech:['Java','Spring Boot','REST'],details:['Wrote focused articles on Java/Spring/REST for global developer community.']},
+  {company:'Learning Actors',title:'Software Instructor',period:'2018–2020',loc:'Athens, Greece',tech:['Java','Spring Boot'],details:['Taught Java + Spring Boot to 25 adults. 90% satisfaction. "Java Hero" award.']},
+  {company:'Ouroboros Office',title:'Co-Founder',period:'2019–2020',loc:'Athens, Greece',tech:['Spring Boot','Angular'],details:['Small web dev studio. Spring Boot + Angular end-to-end projects.']},
+  {company:'NKUA',title:'Course Assistant',period:'2019',loc:'Athens, Greece',tech:['Programming','Data Structures'],details:['Labs, grading, code reviews for Programming & Data Structures courses.']}
+];
+
+const AI_PROJECTS = [
+  {key:'EOS-AI-01',label:'EOS AI — Production Support Extension',status:'IN PROGRESS',desc:'Architected extension to internal EOS AI (Gemini + RAG over codebase) to cover live production incident triage. RAG over incident reports & runbooks, real-time alert injection into LLM context, compressed log summarisation pipeline (Graylog→Gemini), Slack-native triage interface.'},
+  {key:'LLM-RAG-01',label:'LLM Incident Response Architecture & RAG Pipeline',status:'DESIGNED',desc:'Designed prompt-injection pipeline for Grafana/Graylog alert streaming into Gemini context. Hybrid retrieval (similarity + keyword) over past incidents. Hands-on RAG: chunking, embeddings, vector store, re-ranking, context window optimisation for code-heavy corpora at production scale.'},
+  {key:'PROMPT-01',label:'Prompt Engineering · LLM APIs · Agentic Tooling',status:'ONGOING',desc:'Daily practitioner with LLM APIs — multi-turn prompts, system prompts, tool-use patterns for agentic workflows. Internal AI tooling for code review, architecture analysis and incident documentation.'}
+];
+
+const GIT_LOG = [
+  {hash:'a7f3d02',date:'Feb 2024',author:'grigoris',msg:'feat(ariadne): init squad of 7 · built from scratch'},
+  {hash:'b8c1e44',date:'Mar 2024',msg:'feat(eos-ai): add RAG pipeline over incident reports'},
+  {hash:'c2d9f11',date:'Jun 2024',msg:'feat(bet-builder): ship highlights + enhanced odds'},
+  {hash:'d5e2a88',date:'Aug 2024',msg:'refactor(history-audit): trader traceability redesign'},
+  {hash:'e3f7b55',date:'Oct 2024',msg:'feat(eos-ai): wire graylog→gemini log compression pipeline'},
+  {hash:'f1a4c33',date:'Jan 2025',msg:'feat(eos-ai): prod incident triage via Slack native interface'},
+  {hash:'g9b2e17',date:'Mar 2025',msg:'docs(pitch): PIN-secured stakeholder demo presentation'},
+  {hash:'h4c8d99',date:'Feb 2024',msg:'fix(outbox): idempotency on retry — zero duplicate orders'},
+  {hash:'i7e1f22',date:'May 2024',msg:'perf(orders): +25% throughput — batch + index tuning'},
+  {hash:'j0d6a44',date:'Jul 2022',msg:'feat(pdp): rework → +40% engagement +30% conversion'},
+  {hash:'k3b9c66',date:'Oct 2020',msg:'feat(credit-api): iOS/Android/Web backend — +40% retention'},
+  {hash:'l6e4f88',date:'Sep 2017',msg:'feat(lottery): mission-critical sync · zero breaches'},
+  {hash:'m2a7b11',date:'Aug 2016',msg:'feat(cern): raisin+sailor · 99% uptime safety systems'},
+  {hash:'n5c0d33',date:'Sep 2015',msg:'research: TAC AdX agent · 1st place international competition'},
+];
+
+const PROCESSES = [
+  {pid:1001,name:'kafka-consumer',cpu:18,mem:9,status:'running'},
+  {pid:1002,name:'orleans-silo',cpu:12,mem:14,status:'running'},
+  {pid:1003,name:'gemini-rag-pipeline',cpu:31,mem:22,status:'running'},
+  {pid:1004,name:'spring-boot-api',cpu:8,mem:11,status:'running'},
+  {pid:1005,name:'postgres-pool',cpu:5,mem:7,status:'running'},
+  {pid:1006,name:'rabbitmq-broker',cpu:3,mem:4,status:'running'},
+  {pid:1007,name:'graylog-shipper',cpu:4,mem:3,status:'running'},
+  {pid:1008,name:'k8s-scheduler',cpu:6,mem:5,status:'running'},
+  {pid:1009,name:'grafana-agent',cpu:2,mem:2,status:'sleeping'},
+  {pid:1010,name:'incident-triage-bot',cpu:15,mem:12,status:'running'},
+  {pid:1011,name:'vector-store',cpu:9,mem:18,status:'running'},
+  {pid:1012,name:'circuit-breaker',cpu:1,mem:1,status:'sleeping'},
+];
+
+const HTOP_INTERVAL_MS = 1200;
+
+const SSH_HOSTS = {
+  kaizen: {
+    name:'Kaizen Gaming', color:'#38ef7d',
+    banner:'Kaizen Gaming Production Cluster\nAthens-EU-1 · sportsbook.internal · .NET/Orleans',
+    ps:['orleans-silo PID 1001','kafka-consumer PID 1002','gemini-rag PID 1003','bet-builder PID 1044']
+  },
+  cern: {
+    name:'CERN', color:'#60a5fa',
+    banner:'CERN Computing Infrastructure\nGeneva · Radiation Monitoring Division',
+    ps:['raisin-web PID 3001','sailor-app PID 3002','oracle-monitor PID 3003']
+  },
+  tymit: {
+    name:'Tymit', color:'#f97316',
+    banner:'Tymit FinTech Platform\nLondon · Credit Card Backend',
+    ps:['credit-api PID 2001','card-processor PID 2002','graylog-shipper PID 2003']
+  }
+};
+
+const LOG_TEMPLATES = [
+  ()=>`[INFO]  kafka-consumer offset=${Math.floor(Math.random()*999999)} lag=0 partition=${Math.floor(Math.random()*8)}`,
+  ()=>`[INFO]  orleans-silo grain=OddsGrain/${Math.floor(Math.random()*9999)} activation=ok latency=${Math.floor(Math.random()*12)+1}ms`,
+  ()=>`[INFO]  HTTP 200 GET /api/v2/markets/${Math.floor(Math.random()*9999)} ${Math.floor(Math.random()*30)+8}ms`,
+  ()=>`[INFO]  postgres pool=main active=${Math.floor(Math.random()*20)+1}/50 idle=${Math.floor(Math.random()*10)}`,
+  ()=>`[INFO]  rag-pipeline similarity_search k=5 latency=${Math.floor(Math.random()*80)+20}ms`,
+  ()=>`[WARN]  slow query detected table=market_events duration=${Math.floor(Math.random()*200)+150}ms`,
+  ()=>`[INFO]  outbox poller dequeued=1 delivered=1 idempotency=ok`,
+  ()=>`[INFO]  gemini-triage context_tokens=${Math.floor(Math.random()*3000)+1000} completion=ok`,
+  ()=>`[ERROR] kafka-producer retry attempt=1 topic=odds-updates reason=timeout`,
+  ()=>`[INFO]  circuit-breaker state=closed failures=0 threshold=5`,
+  ()=>`[INFO]  k8s pod=ariadne-core-${Math.floor(Math.random()*9)} ready=true restarts=0`,
+  ()=>`[INFO]  grafana alert RESOLVED: P95 latency < 200ms`,
+];
+
+function logLine(){ const t=LOG_TEMPLATES[Math.floor(Math.random()*LOG_TEMPLATES.length)](); const cls=t.includes('[WARN]')?'lg-warn':t.includes('[ERROR]')?'lg-err':t.includes('RESOLVED')||t.includes('ok')?'lg-ok':'lg-info'; return `<span class="${cls}">${new Date().toISOString().slice(11,23)} ${t}</span>`; }
+
+const VIM_CONTENT = `# Grigoris Dimopoulos — CV
+
+## Summary
+AI Engineering Manager · Technical Team Lead · Distributed Systems Architect
+Athens, Greece · Remote EU/UK/US
+grigoriosdimopoulos@gmail.com
+
+9+ years engineering manager & technical lead across betting, fintech,
+lottery and trading platforms. Currently architecting LLM-powered production
+AI systems at Kaizen Gaming — RAG pipelines, Gemini-based incident triage,
+agentic observability. Deep roots in .NET Orleans, Kafka/RabbitMQ,
+event-driven architecture and reliability engineering.
+MSc AI (invented Inverse Ant Colony Algorithm) · TAC Ad Auctions 1st Place
+· CERN alumnus.
+
+## AI & LLM Engineering
+- EOS AI Production Support Extension [IN PROGRESS]
+  RAG over incidents & runbooks, real-time alert injection, Graylog→Gemini
+- LLM Incident Response & RAG Pipeline [DESIGNED]
+  Hybrid retrieval, embeddings, vector store, re-ranking
+- Claude & Gemini APIs · Prompt Engineering · Agentic Tooling [ONGOING]
+
+## Key Impact
++40% engagement (Schumacher)  |  +30% conversion (Schumacher)
++25% order performance        |  7+ engineers led (BE/FE/QA)
+-30% security vulns (Lottery) |  1st place TAC AdX competition
+
+## Education
+MSc Artificial Intelligence & Machine Learning — NKUA (2017–2023)
+  Thesis: Inverse Ant Colony Algorithm — smart city parking optimisation
+BSc Computer Science & Telecommunications — NKUA (2011–2015)
+  Erasmus: Aalto University, Helsinki (2013–14)
+
+## Currently Reading
+- Build a Large Language Model (From Scratch) — Sebastian Raschka
+- Designing Machine Learning Systems — Chip Huyen
+- Meditations — Marcus Aurelius
+
+## Awards
+- 1st Place — International TAC AdX Ad Auctions Competition
+- Java Hero — Agile Actors / Learning Actors
+- Certificate of Competency in English — University of Michigan`;
+
+const SYSTEM_PROMPT = `You are an AI assistant embedded in Grigoris Dimopoulos's personal terminal portfolio website. You answer questions about Grigoris as if you are a well-informed colleague who knows him deeply. Be concise, insightful, and authentic — avoid generic corporate speak. Use terminal-style formatting where helpful (short paragraphs, bullet points with ›). 
+
+Here is Grigoris's background:
+
+CURRENT ROLE: Team Lead — Ariadne Core at Kaizen Gaming (Feb 2024–Present). Built & leads a squad of 4 BE, 1 FE, 2 QA from scratch. Owns event/market/odds workflows with .NET Orleans + Kafka. Driving EOS AI: LLM-powered production incident triage using Gemini + RAG.
+
+AI WORK: Architecting RAG pipeline over incident reports & runbooks. Prompt-injection from Grafana/Graylog into Gemini context. Hybrid retrieval (similarity + keyword). Daily practitioner with LLM APIs — tool-use patterns, agentic workflows, internal tooling.
+
+EARLIER: Lead at Tymit (FinTech, London), Lead at Datawise/FSchumacher (+40% engagement, +30% conversion), Camelot Lottery (security, zero breaches), CERN (99% uptime safety systems), XM Trading.
+
+EDUCATION: MSc AI — invented the Inverse Ant Colony Algorithm for smart city parking optimisation. 1st Place TAC AdX international competition.
+
+STACK: .NET/C#/Orleans, Java/Spring Boot, Kafka, RabbitMQ, PostgreSQL, Kubernetes, AWS, Gemini API, LLM APIs, RAG, vector search, Grafana, Graylog.
+
+OPEN TO: Remote/Hybrid — EM / Staff Eng roles with AI focus (EU/UK/US).
+
+PERSONALITY: Calm under pressure, stoic (reads Marcus Aurelius), cares about simple designs, good observability, clear SLOs, mentoring, steady delivery. Not interested in hype — interested in systems that work.
+
+Keep answers under 150 words unless asked to elaborate. If asked about contact, mention grigoriosdimopoulos@gmail.com.`;
+
+/* ─── BOOT ──────────────────────────────────────────────────────────── */
+const bootlog = document.getElementById('bootlog');
+const bootLines = [
+  '[ OK ] BIOS vendor → VIRT 2.0',
+  '[ OK ] Initializing CPU cores (8) — turbo boost enabled',
+  '[ OK ] Loading kernel 6.6.13-grigoris-ai…',
+  '[ OK ] Mounting / (btrfs, rw, noatime)',
+  '[ OK ] Starting network manager — 10.0.0.42',
+  '[ OK ] Starting sshd',
+  '[ OK ] Loading EOS-AI triage daemon…',
+  '[ OK ] Importing dotfiles + RAG index',
+  '[ OK ] Spawning TTY1',
+  'login: grigoris',
+  'Password: ••••••••',
+  'Last login: '+new Date().toString(),
+  '',
+  'Welcome. Type "help" or press "/" for the command palette.',
+  'Try: whoami · git log · htop · vim · tail -f logs · ask <question> · ssh kaizen'
+];
+const typeLine = (t,ms=22) => new Promise(res=>{
+  let i=0;
+  const id=setInterval(()=>{
+    bootlog.innerHTML += t.slice(i,i+2); i+=2;
+    if(i>=t.length){clearInterval(id);bootlog.innerHTML+='\n';bootlog.scrollTop=bootlog.scrollHeight;res();}
+  },ms);
+});
+(async()=>{
+  for(const l of bootLines) await typeLine(l+'\n');
+  await new Promise(r=>setTimeout(r,300));
+  document.getElementById('boot').style.display='none';
+  openTerminal();
+})();
+
+/* ─── WINDOW MANAGER ────────────────────────────────────────────────── */
+const space=document.getElementById('space');
+const dock=document.getElementById('dock');
+let z=1;
+
+function mkWin({title,id,x=40,y=30,w=820,h=460,content=''}){
+  const el=document.createElement('div'); el.className='win';
+  el.style.left=x+'px'; el.style.top=y+'px';
+  el.style.width=w+'px'; el.style.height=h+'px';
+  el.dataset.id=id;
+  el.innerHTML=`<div class="titlebar"><div class="controls"><div class="btn close"></div><div class="btn min"></div><div class="btn max"></div></div><div class="title">${title}</div></div><div class="content">${content}</div>`;
+  space.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('in'));
+
+  const isMobile=matchMedia('(max-width:768px)').matches;
+  if(isMobile){
+    el.style.left='6px'; el.style.top='6px';
+    el.style.width='calc(100vw - 12px)';
+    el.style.height=`calc(100dvh - 12px - ${getPanelH()}px)`;
+  }
+
+  const bar=el.querySelector('.titlebar');
+  let start=null,dragging=false,maximized=false,prevRect=null;
+  const bounds=()=>({maxX:innerWidth-el.offsetWidth,maxY:innerHeight-getPanelH()-el.offsetHeight});
+  const snap=v=>{const g=8;return Math.round(v/g)*g;};
+
+  bar.addEventListener('pointerdown',e=>{
+    if(e.target.closest('.btn')) return;
+    bringToFront(el); setActiveByWin(el);
+    el.style.willChange='transform,left,top';
+    start={x:e.clientX,y:e.clientY,left:el.offsetLeft,top:el.offsetTop};
+    el.setPointerCapture(e.pointerId);
+    el.classList.add('dragging');
+  });
+  el.addEventListener('pointermove',e=>{
+    if(!start) return;
+    const dx=e.clientX-start.x,dy=e.clientY-start.y;
+    if(!dragging&&(Math.abs(dx)>3||Math.abs(dy)>3)) dragging=true;
+    if(!dragging) return;
+    const b=bounds();
+    el.style.left=snap(Math.max(0,Math.min(b.maxX,start.left+dx)))+'px';
+    el.style.top=snap(Math.max(0,Math.min(b.maxY,start.top+dy)))+'px';
+  });
+  const endDrag=()=>{start=null;dragging=false;el.classList.remove('dragging');el.style.willChange='auto';};
+  el.addEventListener('pointerup',endDrag);
+  el.addEventListener('pointercancel',endDrag);
+  el.addEventListener('lostpointercapture',endDrag);
+  document.addEventListener('visibilitychange',()=>{start=null;dragging=false;el.classList.remove('dragging');});
+  bar.addEventListener('dblclick',()=>toggleMax());
+
+  function toggleMax(){
+    if(!maximized){
+      prevRect={left:el.style.left,top:el.style.top,width:el.style.width,height:el.style.height};
+      el.style.left='6px';el.style.top='6px';
+      el.style.width=(innerWidth-12)+'px';el.style.height=(innerHeight-12-getPanelH())+'px';
+      maximized=true;
+    } else {
+      if(prevRect){el.style.left=prevRect.left;el.style.top=prevRect.top;el.style.width=prevRect.width;el.style.height=prevRect.height;}
+      maximized=false;
+    }
+  }
+
+  const close=()=>{
+    el.remove();
+    dock.querySelector(`[data-id="${id}"]`)?.remove();
+    TERMINALS.delete(id);
+    if(activeTermId===id) activeTermId=[...TERMINALS.keys()].pop()||null;
+  };
+  const min=()=>{el.style.display='none';badge.classList.add('min');};
+  el.querySelector('.btn.close').onclick=close;
+  el.querySelector('.btn.min').onclick=min;
+  el.querySelector('.btn.max').onclick=toggleMax;
+  el.addEventListener('mousedown',()=>{bringToFront(el);setActiveByWin(el);});
+
+  const badge=document.createElement('span');
+  badge.className='badge'; badge.textContent=title; badge.dataset.id=id;
+  badge.onclick=()=>{
+    el.style.display=(getComputedStyle(el).display==='none')?'block':'none';
+    bringToFront(el); badge.classList.toggle('min'); setActiveByWin(el);
+  };
+  dock.appendChild(badge);
+  bringToFront(el);
+  fitInsideViewport(el);
+  return el;
+}
+
+function getPanelH(){const p=document.querySelector('.panel');return p?p.getBoundingClientRect().height:36;}
+function fitInsideViewport(win){
+  const b={maxX:innerWidth-win.offsetWidth,maxY:innerHeight-getPanelH()-win.offsetHeight};
+  win.style.left=Math.max(0,Math.min(b.maxX,win.offsetLeft))+'px';
+  win.style.top=Math.max(0,Math.min(b.maxY,win.offsetTop))+'px';
+}
+window.addEventListener('resize',()=>document.querySelectorAll('.win').forEach(fitInsideViewport));
+function bringToFront(w){w.style.zIndex=++z;}
+
+/* ─── TERMINAL ──────────────────────────────────────────────────────── */
+const TERMINALS=new Map();
+let activeTermId=null;
+const USER={email:localStorage.getItem('contactEmail')||'grigoriosdimopoulos@gmail.com'};
+let TERM_COUNT=0;
+
+class Terminal {
+  constructor(winEl){
+    this.winEl=winEl;
+    this.term=winEl.querySelector('.term');
+    this.history=[]; this.hIdx=0;
+    this.FORM=null; this.CWD='/home/grigoris';
+    this._htopTimer=null;
+    this._tailTimer=null;
+    this._pingTimer=null;
+    this.bootPrompt();
+    this.winEl.addEventListener('mousedown',()=>setActiveByWin(this.winEl));
+  }
+  newLine(){const d=document.createElement('div');d.className='line';this.term.appendChild(d);return d;}
+  prompt(){
+    this.term.querySelectorAll('.cursor').forEach(c=>c.remove());
+    this.term.querySelectorAll('[data-cmd]').forEach(el=>{
+      el.removeAttribute('id');
+      el.setAttribute('contenteditable','false');
+      el.setAttribute('tabindex','-1');
+      el.classList.add('readonly');
+    });
+    const line=this.newLine();
+    line.innerHTML=`<span class='prompt'>grigoris@console</span>:<span class='path'>${this.CWD}</span>$ <span data-cmd='input' id='cmd' contenteditable="true" spellcheck="false"></span><span class='cursor'></span>`;
+    this.term.scrollTop=this.term.scrollHeight;
+    const el=line.querySelector('#cmd');
+    el.focus();
+    return el;
+  }
+  focusCmd(){
+    let el=this.winEl.querySelector('#cmd');
+    if(!el){el=this.prompt();}
+    el.focus();
+    this.placeCaretAtEnd(el);
+    return el;
+  }
+  insertAtCursor(text){
+    const el=this.focusCmd();
+    const sel=window.getSelection();
+    if(!sel.rangeCount) return;
+    const r=sel.getRangeAt(0);
+    r.deleteContents();
+    r.insertNode(document.createTextNode(text));
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  print(s,cls='out'){
+    const d=this.newLine();
+    d.className='line '+cls;
+    d.innerHTML=s;
+    this.term.scrollTop=this.term.scrollHeight;
+  }
+  type(text,speed=12){
+    return new Promise(res=>{
+      const c=this.prompt();
+      let i=0;
+      const id=setInterval(()=>{
+        c.textContent+=text[i++]||'';
+        if(i>text.length){clearInterval(id);res();}
+        this.term.scrollTop=this.term.scrollHeight;
+      },speed);
+    });
+  }
+  async run(text){this.history.push(text);this.hIdx=this.history.length;await this.type(text);await this.exec(text);}
+  bootPrompt(){
+    this.print('Type <span class="hl">help</span> or press <span class="hl">/</span> for the palette. Click green text to run commands.');
+    this.print(`<span class='alink' data-cmd='whoami'>whoami</span> · <span class='alink' data-cmd='git log'>git log</span> · <span class='alink' data-cmd='htop'>htop</span> · <span class='alink' data-cmd='experience'>experience</span> · <span class='alink' data-cmd='ask what makes you stand out?'>ask</span> · <span class='alink' data-cmd='vim'>vim</span> · <span class='alink' data-cmd='tail -f logs'>tail -f logs</span> · <span class='alink' data-cmd='contact'>contact</span>`);
+    this.prompt();
+  }
+  placeCaretAtEnd(el){const r=document.createRange();r.selectNodeContents(el);r.collapse(false);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}
+
+  /* ── COMMANDS ── */
+  showRole(arg){
+    if(!arg){
+      this.print('<strong>Experience</strong> — '+ROLES.length+' roles');
+      ROLES.forEach((r,i)=>this.print(
+        `<div>[<span class='alink' data-cmd='role ${i+1}'>${i+1}</span>] `+
+        `<span class='alink' data-cmd='role ${i+1}'><strong>${r.title}</strong> · ${r.company}</span>`+
+        ` — <span style='opacity:.7'>${r.period}</span></div>`
+      ));
+      this.print('<div>Click a role or type <span class="hl">role #</span> / <span class="hl">role kaizen</span></div>');
+    } else {
+      const r=resolveRole(arg);
+      if(!r){this.print('role not found: '+sanitize(arg),'err');return;}
+      const techBadges=r.tech.map(t=>`<span style='border:1px solid #1f2937;border-radius:4px;padding:1px 5px;margin-right:4px;font-size:11px;color:#60a5fa'>${t}</span>`).join('');
+      this.print(
+        `<div class='out'><h3 style='margin:4px 0'>${r.title}</h3>`+
+        `<div style='opacity:.7;margin-bottom:4px'>${r.period} · ${r.loc}</div>`+
+        `<div style='margin-bottom:6px'>${techBadges}</div>`+
+        `<ul>${r.details.map(d=>`<li>${d}</li>`).join('')}</ul></div>`
+      );
+    }
+  }
+
+  showAIWork(){
+    this.print('<strong>AI & LLM Engineering</strong>');
+    AI_PROJECTS.forEach(p=>{
+      const col=p.status==='IN PROGRESS'?'#38ef7d':p.status==='ONGOING'?'#60a5fa':'#fbbf24';
+      this.print(
+        `<div><span style='color:${col};font-size:11px;border:1px solid ${col}33;border-radius:3px;padding:1px 5px'>${p.status}</span> `+
+        `<strong>${p.label}</strong><br/><span style='opacity:.8;font-size:13px'>${p.desc}</span></div>`
+      );
+    });
+  }
+
+  showGitLog(){
+    this.print('<strong>git log --oneline --all</strong>');
+    GIT_LOG.forEach(c=>{
+      const hash=c.hash||'';
+      this.print(
+        `<div><span class='git-hash'>${hash}</span> `+
+        `<span class='git-date'>(${c.date})</span> `+
+        `<span class='git-msg'>${c.msg}</span></div>`
+      );
+    });
+    this.print(`<div style='opacity:.6;margin-top:4px'>${GIT_LOG.length} commits · spanning 2015–present</div>`);
+  }
+
+  startHtop(){
+    this._stopAll();
+    const content=this.winEl.querySelector('.content');
+    const wrap=document.createElement('div');
+    wrap.style.cssText='font-family:inherit;font-size:12px;';
+    content.appendChild(wrap);
+
+    const render=()=>{
+      const procs=PROCESSES.map(p=>({
+        ...p,
+        cpu:Math.max(0,Math.min(99,p.cpu+(Math.random()*6-3)|0)),
+        mem:Math.max(0,Math.min(99,p.mem+(Math.random()*2-1)|0))
+      }));
+      const total_cpu=procs.reduce((a,p)=>a+p.cpu,0);
+      const total_mem=procs.reduce((a,p)=>a+p.mem,0);
+      wrap.innerHTML=
+        `<div style='color:#38ef7d;margin-bottom:4px'>grigoris@console htop — press <span style='color:#e3ffa8'>q</span> to quit</div>`+
+        `<div style='margin-bottom:4px'><span style='color:#9ab4a0'>CPU: </span><span class='bar-wrap'><span class='bar-fill' style='width:${Math.min(99,total_cpu/PROCESSES.length)}%'></span></span> ${(total_cpu/PROCESSES.length).toFixed(0)}% &nbsp; <span style='color:#9ab4a0'>MEM: </span><span class='bar-wrap'><span class='bar-fill' style='width:${Math.min(99,total_mem/PROCESSES.length)}%;background:linear-gradient(90deg,#60a5fa,#818cf8)'></span></span> ${(total_mem/PROCESSES.length).toFixed(0)}%</div>`+
+        `<table class='htop-table'><tr><th>PID</th><th>NAME</th><th>CPU%</th><th>MEM%</th><th>STATUS</th></tr>`+
+        procs.map(p=>`<tr><td>${p.pid}</td><td style='color:#cde8cf'>${p.name}</td><td><span class='bar-wrap'><span class='bar-fill' style='width:${p.cpu}%'></span></span> ${p.cpu}%</td><td><span class='bar-wrap'><span class='bar-fill' style='width:${p.mem}%;background:linear-gradient(90deg,#60a5fa,#818cf8)'></span></span> ${p.mem}%</td><td style='color:${p.status==="running"?"#38ef7d":"#fbbf24"}'>${p.status}</td></tr>`).join('')+
+        `</table>`;
+    };
+    render();
+    this._htopTimer=setInterval(render,HTOP_INTERVAL_MS);
+    this._htopWrap=wrap;
+    this.print('<span style="opacity:.5">htop active — type <span class="hl">q</span> to quit</span>');
+  }
+
+  startTail(){
+    this._stopAll();
+    this.print('<strong>tail -f /var/log/ariadne/prod.log</strong>');
+    this.print('<span style="opacity:.5">streaming — type <span class="hl">q</span> to stop</span>');
+    const stream=()=>{
+      const d=this.newLine();
+      d.className='line logstream';
+      d.innerHTML=logLine();
+      this.term.scrollTop=this.term.scrollHeight;
+    };
+    stream();
+    this._tailTimer=setInterval(stream,Math.random()*600+200);
+  }
+
+  startPing(host){
+    this._stopAll();
+    host=host||'grigoriosdimopoulos.com';
+    this.print(`<strong>PING ${host}</strong>`);
+    let seq=1,sent=0,recv=0;
+    const ping=()=>{
+      sent++;
+      const ms=(Math.random()*15+8).toFixed(1);
+      recv++;
+      const d=this.newLine();
+      d.className='line ping-line';
+      d.innerHTML=`64 bytes from <span style='color:#cde8cf'>${host}</span>: icmp_seq=${seq++} ttl=64 time=<span class='ping-stat'>${ms}ms</span>`;
+      this.term.scrollTop=this.term.scrollHeight;
+    };
+    ping();
+    this._pingTimer=setInterval(ping,900);
+    this._pingHost=host;
+    this._pingSent=()=>sent;
+    this._pingRecv=()=>recv;
+    this.print('<span style="opacity:.5">type <span class="hl">q</span> to stop</span>');
+  }
+
+  stopPingStats(){
+    const sent=this._pingSent?this._pingSent():0;
+    const recv=this._pingRecv?this._pingRecv():0;
+    this.print(`<span class='ping-stat'>--- ping statistics ---</span>`);
+    this.print(`${sent} packets transmitted, ${recv} received, 0% packet loss`);
+  }
+
+  _stopAll(){
+    if(this._htopTimer){clearInterval(this._htopTimer);this._htopTimer=null;if(this._htopWrap)this._htopWrap.remove();}
+    if(this._tailTimer){clearInterval(this._tailTimer);this._tailTimer=null;}
+    if(this._pingTimer){this.stopPingStats();clearInterval(this._pingTimer);this._pingTimer=null;}
+  }
+
+  openVim(){
+    const content=this.winEl.querySelector('.content');
+    let overlay=content.querySelector('.vim-overlay');
+    if(!overlay){
+      overlay=document.createElement('div');
+      overlay.className='vim-overlay';
+      overlay.innerHTML=
+        `<div class="vim-body"><pre style='margin:0;white-space:pre-wrap'>${VIM_CONTENT}</pre></div>`+
+        `<div class="vim-statusline"><span>CV.md  [readonly]</span><span>NORMAL</span></div>`+
+        `<div class="vim-cmdline" id="vimcmd"></div>`;
+      content.appendChild(overlay);
+    }
+    overlay.classList.add('active');
+    this._vimOpen=true;
+
+    const cmdline=overlay.querySelector('#vimcmd');
+    let vimInput='';
+    const vimKeydown=e=>{
+      if(!this._vimOpen) return;
+      if(e.key===':'){vimInput=':';cmdline.textContent=':';e.preventDefault();return;}
+      if(vimInput.startsWith(':')){
+        if(e.key==='Enter'){
+          const cmd=vimInput.slice(1).trim();
+          if(cmd==='q'||cmd==='q!'||cmd==='wq'||cmd==='x'){
+            if(cmd==='wq'||cmd==='x') this.print('[No new file written — CV is read-only]');
+            overlay.classList.remove('active');
+            this._vimOpen=false;
+            cmdline.textContent='';
+            document.removeEventListener('keydown',vimKeydown);
+            this.focusCmd();
+          } else {
+            cmdline.textContent=`Not an editor command: ${cmd}`;
+            vimInput='';
+          }
+          e.preventDefault();
+        } else if(e.key==='Backspace'){
+          vimInput=vimInput.slice(0,-1);
+          cmdline.textContent=vimInput||'';
+          e.preventDefault();
+        } else if(e.key.length===1){
+          vimInput+=e.key;
+          cmdline.textContent=vimInput;
+          e.preventDefault();
+        } else if(e.key==='Escape'){
+          vimInput='';cmdline.textContent='';e.preventDefault();
+        }
+      } else if(e.key==='Escape'){
+        overlay.classList.remove('active');
+        this._vimOpen=false;
+        document.removeEventListener('keydown',vimKeydown);
+        this.focusCmd();
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('keydown',vimKeydown);
+    this.print('vim CV.md  (use <span class="hl">:q</span> to quit, <span class="hl">:wq</span> to "save")');
+  }
+
+  openSSH(host){
+    const cfg=SSH_HOSTS[host.toLowerCase()];
+    if(!cfg){this.print(`ssh: ${sanitize(host)}: no such host — try: ${Object.keys(SSH_HOSTS).join(', ')}`, 'err');return;}
+    const id='ssh-'+host+'-'+Date.now();
+    const win=mkWin({title:`ssh ${cfg.name}`,id,x:80,y:60,w:700,h:380,content:`<div class='term'></div>`});
+    const t=new Terminal(win);
+    TERMINALS.set(id,t);
+    t.term.innerHTML='';
+    t.print(`<span style='color:${cfg.color}'>Connecting to ${cfg.name}...</span>`);
+    setTimeout(()=>{
+      t.print(`<span style='color:${cfg.color}'>Connected ✓</span>`);
+      t.print(cfg.banner.replace(/\n/g,'<br/>'));
+      t.print('');
+      t.print('<strong>$ ps aux</strong>');
+      cfg.ps.forEach(p=>t.print(`  ${p}`));
+      t.print('');
+      t.print(`<span style='opacity:.6'>This is a simulation. Type <span class="hl">exit</span> or close the window.</span>`);
+      t.prompt();
+    },600);
+  }
+
+  async askAI(question){
+    if(!question){this.print('usage: ask <your question>','err');return;}
+    const thinkLine=this.newLine();
+    thinkLine.className='line';
+    thinkLine.innerHTML=`<span class='ai-thinking'>thinking</span>`;
+    this.term.scrollTop=this.term.scrollHeight;
+    try {
+      const response=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:400,
+          system:SYSTEM_PROMPT,
+          messages:[{role:'user',content:question}]
+        })
+      });
+      const data=await response.json();
+      thinkLine.remove();
+      if(data.content&&data.content[0]){
+        const text=data.content.map(b=>b.text||'').join('');
+        const html=text
+          .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(/›/g,'<span style="color:#38ef7d">›</span>')
+          .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+          .replace(/\n/g,'<br/>');
+        this.print(`<div style='border-left:2px solid #38ef7d44;padding-left:8px'><span style='color:#60a5fa;font-size:11px'>response</span><br/>${html}</div>`);
+      } else {
+        this.print('no response from AI','err');
+      }
+    } catch(e) {
+      thinkLine.remove();
+      this.print('AI unavailable: '+e.message,'err');
+    }
+  }
+
+  contact(){
+    this.FORM={step:0,data:{name:'',email:'',subject:'',message:''},fields:['name','email','subject','message']};
+    this.print('<strong>Contact Grigoris</strong>');
+    this.print('Will send to <span class="hl">'+USER.email+'</span>. Change with <span class="hl">set email you@domain.com</span>.');
+    this.print('Enter your <strong>name</strong>:');
+  }
+
+  async exec(input){
+    const raw=(input||'').trim();
+
+    // streaming stop commands
+    if(raw==='q'||raw==='quit'){
+      if(this._htopTimer||this._tailTimer||this._pingTimer){this._stopAll();this.prompt();return;}
+    }
+    if(this._vimOpen){return;}
+
+    if(this.FORM){
+      const f=this.FORM.fields[this.FORM.step];
+      this.FORM.data[f]=sanitize(raw);
+      this.FORM.step++;
+      if(this.FORM.step<this.FORM.fields.length){
+        this.print('Enter your <strong>'+this.FORM.fields[this.FORM.step]+'</strong>:');
+      } else {
+        const {name,email,subject,message}=this.FORM.data;
+        const body='From: '+name+' <'+email+">\n\n"+message;
+        mailto({to:USER.email,subject,body});
+        this.print('opening mail client…');
+        this.FORM=null;
+      }
+      this.prompt();
+      return;
+    }
+
+    const parts=raw.split(/\s+/);
+    const cmd=parts[0]||'';
+    const argStr=raw.slice(cmd.length).trim();
+
+    // alias map
+    const ALIAS_MAP={
+      exp:'experience',role:'experience',roles:'experience',work:'experience',
+      jobs:'experience',job:'experience',description:'experience',desc:'experience',jd:'experience',
+      newterm:'newterm',tty:'newterm',terminal:'newterm','new':'newterm',tab:'newterm',
+      man:'commands',q:'q',quit:'q',exit:'exit'
+    };
+    const resolved=ALIAS_MAP[cmd]||cmd;
+
+    switch(resolved){
+      case 'newterm': openTerminal(); break;
+
+      case 'exit':
+        if(parts[0]==='exit'&&argStr===''){
+          this.print('logout');
+          setTimeout(()=>{
+            const b=this.winEl.querySelector('.btn.close');
+            if(b) b.click();
+          },400);
+        } else { this.print('exit: cannot exit — close the window','err'); }
+        break;
+
+      case 'commands':
+        this.print(`<div class='out'><strong>All Commands</strong><ul>
+          <li><code>whoami</code> — bio</li>
+          <li><code>experience</code> / <code>role [#|query]</code> — list or drill into a role</li>
+          <li><code>ai</code> — AI & LLM project highlights</li>
+          <li><code>git log</code> — career commit history</li>
+          <li><code>htop</code> — live process table</li>
+          <li><code>tail -f logs</code> — live production log stream</li>
+          <li><code>vim</code> — open CV in vim</li>
+          <li><code>ping [host]</code> — packet roundtrip</li>
+          <li><code>ssh kaizen|cern|tymit</code> — connect to past employers</li>
+          <li><code>ask &lt;question&gt;</code> — AI answers about Grigoris</li>
+          <li><code>contact</code> — send an email</li>
+          <li><code>open linkedin|cv|&lt;url&gt;</code></li>
+          <li><code>neofetch</code>, <code>uname -a</code>, <code>date</code>, <code>ls</code>, <code>pwd</code>, <code>cd</code>, <code>history</code>, <code>clear</code></li>
+          <li><code>reboot</code>, <code>sudo</code>, <code>selftest</code></li>
+          <li><code>q</code> — quit htop/tail/ping</li>
+        </ul></div>`);
+        break;
+
+      case 'help':
+        this.print('Commands: <span class="hl">whoami</span> · <span class="hl">experience</span> · <span class="hl">ai</span> · <span class="hl">git log</span> · <span class="hl">htop</span> · <span class="hl">tail -f logs</span> · <span class="hl">vim</span> · <span class="hl">ping</span> · <span class="hl">ssh kaizen</span> · <span class="hl">ask &lt;question&gt;</span> · <span class="hl">contact</span> · type <span class="hl">commands</span> for full list');
+        break;
+
+      case 'clear': this.term.innerHTML=''; break;
+
+      case 'experience': this.showRole(argStr); break;
+
+      case 'ai': this.showAIWork(); break;
+
+      case 'git':
+        if(parts[1]==='log') this.showGitLog();
+        else this.print('usage: git log','err');
+        break;
+
+      case 'htop': this.startHtop(); break;
+
+      case 'tail':
+        if(argStr==='-f logs'||argStr==='-f /var/log/ariadne/prod.log'||argStr==='-f') this.startTail();
+        else this.print('usage: tail -f logs','err');
+        break;
+
+      case 'vim': this.openVim(); break;
+
+      case 'ping': this.startPing(argStr||'grigoriosdimopoulos.com'); break;
+
+      case 'ssh': {
+        const host=argStr.toLowerCase();
+        if(!host){this.print('usage: ssh <host> — available: '+Object.keys(SSH_HOSTS).join(', '),'err');break;}
+        this.openSSH(host);
+        break;
+      }
+
+      case 'ask': {
+        const question=argStr;
+        await this.askAI(question);
+        break;
+      }
+
+      case 'contact': this.contact(); break;
+
+      case 'set': {
+        const [what,value]=argStr.split(/\s+/,2);
+        if(what==='email'&&value&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)){
+          USER.email=value; localStorage.setItem('contactEmail',value);
+          this.print('email set to '+value);
+        } else { this.print('usage: set email you@domain.com','err'); }
+        break;
+      }
+
+      case 'open': {
+        if(!argStr){this.print('usage: open <url|alias>','err');break;}
+        const aliases={linkedin:'https://www.linkedin.com/in/grigoris-dimopoulos-892633bb',cv:'/cv.pdf'};
+        const target=aliases[argStr.toLowerCase()]||argStr;
+        window.open(target,'_blank','noopener');
+        this.print('opening '+sanitize(target)+' ...');
+        break;
+      }
+
+      case 'whoami':
+        this.print(`<div class='out'>
+          <strong>Grigoris Dimopoulos</strong><br/>
+          AI Engineering Manager · Technical Team Lead · Distributed Systems Architect<br/>
+          Athens, Greece · Remote EU/UK/US &nbsp;|&nbsp; <span style='color:#38ef7d'>● OPEN TO WORK</span>
+          <ul>
+            <li><strong>Currently:</strong> Team Lead @ Kaizen Gaming — architecting EOS AI (Gemini + RAG) for live incident triage</li>
+            <li><strong>Stack:</strong> .NET/C#/Orleans, Java/Spring Boot, Kafka, PostgreSQL, Kubernetes, AWS, Gemini, Claude</li>
+            <li><strong>Background:</strong> Betting, FinTech, Lottery, Trading, CERN, Samsung</li>
+            <li><strong>Research:</strong> MSc AI — invented Inverse Ant Colony Algorithm · 1st Place TAC AdX competition</li>
+            <li><strong>I care about:</strong> simple designs, observability, clear SLOs, steady delivery, mentoring</li>
+          </ul>
+          Try: <span class='alink' data-cmd='ai'>ai</span> · <span class='alink' data-cmd='git log'>git log</span> · <span class='alink' data-cmd='ask what are your strengths?'>ask what are your strengths?</span>
+        </div>`);
+        break;
+
+      case 'ls':
+        this.print(['README.md','experience/','ai/','cv.pdf','contact','.bashrc','.vimrc'].join('  '));
+        break;
+
+      case 'pwd': this.print(this.CWD); break;
+
+      case 'cd': this.CWD=argStr||'/home/grigoris'; break;
+
+      case 'history': this.history.forEach((h,i)=>this.print((i+1)+'  '+sanitize(h))); break;
+
+      case 'uname':
+        if(argStr==='-a') this.print('Linux console 6.6.13-grigoris-ai #1 SMP PREEMPT x86_64 GNU/Linux');
+        else this.print('Linux');
+        break;
+
+      case 'neofetch':
+        this.print(`<pre>grigoris@console
+-----------
+OS: consoleOS 2.0 (AI Edition)
+Kernel: 6.6.13-grigoris-ai
+Uptime: ${Math.floor(performance.now()/1000)}s
+Shell: web-term
+CPU: 8-core (virt)
+Memory: ok
+AI: Gemini + Claude RAG
+Stack: .NET/Orleans · Java/Spring · Kafka
+Role: Team Lead · AI Engineering Manager
+</pre>`);
+        break;
+
+      case 'date': this.print(new Date().toString()); break;
+      case 'reboot': location.reload(); break;
+      case 'sudo': this.print('Nice try. I run rootless containers here.'); break;
+      case 'selftest': runSelfTests(this); break;
+
+      case 'tmux':
+        this.print('tmux: splitting pane... (aesthetic only, window manager handles real splitting)');
+        openTerminal('Terminal — pane-'+(TERM_COUNT+1));
+        break;
+
+      default:
+        if(cmd) this.print('command not found: '+sanitize(cmd)+' &nbsp; (try <span class="hl">help</span>)','err');
+    }
+    this.prompt();
+  }
+}
+
+/* ─── HELPERS ───────────────────────────────────────────────────────── */
+function sanitize(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function resolveRole(q){
+  if(!q) return null;
+  const s=String(q).trim();
+  if(/^\d+$/.test(s)){const i=Number(s)-1;return ROLES[i]||null;}
+  const idx=ROLES.findIndex(r=>r.company.toLowerCase().includes(s.toLowerCase())||r.title.toLowerCase().includes(s.toLowerCase()));
+  return idx>-1?ROLES[idx]:null;
+}
+function mailto({to,subject,body}){location.href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;}
+
+/* ─── TERMINAL FACTORY ──────────────────────────────────────────────── */
+function openTerminal(label){
+  TERM_COUNT++;
+  const id='terminal-'+TERM_COUNT;
+  const el=mkWin({title:label||('Terminal — TTY'+TERM_COUNT),id,content:`<div class='term'></div>`});
+  const t=new Terminal(el);
+  TERMINALS.set(id,t);
+  activeTermId=id;
+  return t;
+}
+function setActiveByWin(winEl){for(const [id,inst] of TERMINALS){if(inst.winEl===winEl){activeTermId=id;break;}}}
+function getActive(){return activeTermId?TERMINALS.get(activeTermId):null;}
+
+/* ─── GLOBAL INTERACTIONS ───────────────────────────────────────────── */
+document.addEventListener('click',e=>{
+  const a=e.target.closest('.alink');
+  if(!a) return;
+  const termWin=e.target.closest('.win');
+  const targetInst=[...TERMINALS.values()].find(t=>t.winEl===termWin)||getActive();
+  const c=a.dataset.cmd;
+  e.preventDefault();
+  targetInst&&targetInst.run(c);
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&document.activeElement!==palInput){
+    e.preventDefault();togglePalette(true);return;
+  }
+  const t=getActive();if(!t) return;
+  const cmdEl=t.winEl.querySelector('#cmd');
+  if(document.activeElement!==cmdEl&&document.activeElement!==palInput&&!e.metaKey&&!e.ctrlKey){
+    if(e.key.length===1){e.preventDefault();t.insertAtCursor(e.key);return;}
+    if(['Backspace','Delete','ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();t.focusCmd();return;}
+  }
+  if(!cmdEl||e.metaKey||e.ctrlKey) return;
+  if(e.key==='Enter'){
+    e.preventDefault();
+    const v=cmdEl.textContent.trim();
+    if(v){t.history.push(v);t.hIdx=t.history.length;}
+    t.exec(v);cmdEl.parentElement.remove();return;
+  }
+  if(e.key==='ArrowUp'){
+    e.preventDefault();
+    if(!t.history.length) return;
+    if(t.hIdx===t.history.length) t.hIdx=t.history.length-1;
+    else t.hIdx=Math.max(0,t.hIdx-1);
+    cmdEl.textContent=t.history[t.hIdx]||'';
+    t.placeCaretAtEnd(cmdEl);return;
+  }
+  if(e.key==='ArrowDown'){
+    e.preventDefault();
+    if(!t.history.length) return;
+    t.hIdx=Math.min(t.history.length,t.hIdx+1);
+    cmdEl.textContent=(t.hIdx===t.history.length)?'':(t.history[t.hIdx]||'');
+    t.placeCaretAtEnd(cmdEl);return;
+  }
+});
+
+document.addEventListener('mousedown',e=>{
+  if(e.target.closest('.alink')||e.target.closest('#palette')) return;
+  const termWin=e.target.closest('.win');
+  if(termWin&&TERMINALS.size){
+    setActiveByWin(termWin);
+    const t=getActive();
+    if(e.target.closest('.term')){e.preventDefault();t&&t.focusCmd();}
+  }
+});
+
+document.addEventListener('paste',e=>{
+  const t=getActive();if(!t) return;
+  const cmdEl=t.winEl.querySelector('#cmd');if(!cmdEl) return;
+  const txt=(e.clipboardData||window.clipboardData).getData('text');
+  const sel=window.getSelection();
+  if(sel.rangeCount){const r=sel.getRangeAt(0);r.deleteContents();r.insertNode(document.createTextNode(txt));r.collapse(false);}
+  e.preventDefault();
+});
+
+/* ─── PALETTE ───────────────────────────────────────────────────────── */
+const palette=document.getElementById('palette');
+const palInput=document.getElementById('palInput');
+const palList=document.getElementById('palList');
+const COMMANDS=[
+  'whoami','experience','ai','git log','htop','tail -f logs','vim','ping',
+  'ssh kaizen','ssh cern','ssh tymit','ask what makes you stand out?',
+  'ask what is your biggest technical achievement?','ask are you open to work?',
+  'ask what ai projects have you built?','ask what is your management style?',
+  'contact','newterm','open linkedin','open cv',
+  'neofetch','uname -a','date','ls','pwd','history','clear','reboot','selftest','commands','help'
+];
+let palIdx=-1;
+function togglePalette(on){palette.style.display=on?'block':'none';if(on){palInput.value='';buildPal('');palInput.focus();palIdx=-1;}}
+function buildPal(q){palList.innerHTML=COMMANDS.filter(c=>c.toLowerCase().includes(q.toLowerCase())).map(c=>`<li data-cmd="${c}">${c}</li>`).join('');palIdx=-1;}
+palInput.addEventListener('input',e=>buildPal(e.target.value));
+palInput.addEventListener('keydown',e=>{
+  const items=palList.querySelectorAll('li');
+  if(e.key==='ArrowDown'){e.preventDefault();palIdx=Math.min(palIdx+1,items.length-1);items.forEach((li,i)=>li.classList.toggle('active',i===palIdx));return;}
+  if(e.key==='ArrowUp'){e.preventDefault();palIdx=Math.max(palIdx-1,0);items.forEach((li,i)=>li.classList.toggle('active',i===palIdx));return;}
+  if(e.key==='Enter'){
+    const active=palList.querySelector('li.active')||palList.querySelector('li');
+    if(active){togglePalette(false);const t=getActive();t&&t.run(active.dataset.cmd);}
+    return;
+  }
+});
+palette.addEventListener('click',e=>{const li=e.target.closest('li');if(!li) return;togglePalette(false);const t=getActive();t&&t.run(li.dataset.cmd);});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') togglePalette(false);});
+
+/* ─── CLOCK ─────────────────────────────────────────────────────────── */
+const clock=document.getElementById('clock');
+setInterval(()=>clock.textContent=new Date().toLocaleTimeString(),1000);
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1500);}
+
+/* ─── SELF TESTS ─────────────────────────────────────────────────────── */
+function runSelfTests(inst){
+  const results=[];
+  const ok=(name,cond)=>results.push({name,pass:!!cond});
+  ok('resolveRole by index',resolveRole('1')===ROLES[0]);
+  ok('resolveRole by name',(resolveRole('Kaizen Gaming')||{}).company==='Kaizen Gaming');
+  ok('TERMINALS is Map',TERMINALS instanceof Map);
+  ok('COMMANDS includes git log',COMMANDS.includes('git log'));
+  ok('COMMANDS includes ask',COMMANDS.some(c=>c.startsWith('ask')));
+  ok('openTerminal registers terminal',(()=>{const before=TERMINALS.size;const t=openTerminal('TTY-test');return TERMINALS.size===before+1&&!!t;})());
+  ok('activeTermId valid',activeTermId==null||TERMINALS.has(activeTermId));
+  ok('sanitize escapes XSS',sanitize('<img onerror=x>')!=='<img onerror=x>');
+  ok('GIT_LOG non-empty',GIT_LOG.length>0);
+  ok('ROLES has AI entry',ROLES.some(r=>r.company==='Kaizen Gaming'));
+  console.group('[selftest]');results.forEach(r=>console.log(r.pass?'✔':'✘',r.name));console.groupEnd();
+  (inst||getActive()).print('<strong>Self test</strong>');
+  results.forEach(r=>(inst||getActive()).print((r.pass?'<span style="color:#38ef7d">✔</span>':'<span style="color:#ff6b6b">✘</span>')+' '+r.name));
+}
+</script>
+</body>
+</html>
