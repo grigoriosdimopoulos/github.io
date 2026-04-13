@@ -1,0 +1,1854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Agent System — Deep Dive</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #060810;
+    --bg2: #0c1120;
+    --bg3: #111827;
+    --border: rgba(99,179,237,0.15);
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --accent3: #34d399;
+    --accent4: #f472b6;
+    --accent5: #fb923c;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --glow: 0 0 20px rgba(56,189,248,0.3);
+    --glow2: 0 0 20px rgba(129,140,248,0.3);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* ─── NOISE OVERLAY ─── */
+  body::before {
+    content:'';
+    position:fixed;
+    inset:0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events:none;
+    z-index:0;
+    opacity:0.4;
+  }
+
+  /* ─── NAV ─── */
+  nav {
+    position: fixed; top:0; left:0; right:0;
+    z-index:100;
+    background: rgba(6,8,16,0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 56px;
+    display: flex; align-items:center; gap:0;
+  }
+  .nav-logo {
+    font-size:.85rem; font-weight:700; letter-spacing:.1em;
+    color: var(--accent); text-transform:uppercase;
+    margin-right: 2rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .nav-tabs {
+    display:flex; gap:0; height:56px;
+    overflow-x:auto; scrollbar-width:none;
+  }
+  .nav-tabs::-webkit-scrollbar { display:none; }
+  .nav-tab {
+    height:56px; padding: 0 1.1rem;
+    font-size:.72rem; font-weight:600; letter-spacing:.08em;
+    text-transform:uppercase; color: var(--muted);
+    cursor:pointer; border:none; background:none;
+    border-bottom: 2px solid transparent;
+    transition: color .2s, border-color .2s;
+    white-space:nowrap;
+  }
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+  /* ─── SECTIONS ─── */
+  section {
+    display:none; padding: 80px 0 40px;
+    min-height:100vh;
+    animation: fadeIn .4s ease;
+  }
+  section.active { display:block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
+
+  .container { max-width:1100px; margin:0 auto; padding: 0 2rem; }
+
+  /* ─── HERO ─── */
+  .hero { text-align:center; padding:4rem 0 3rem; }
+  .hero-badge {
+    display:inline-block;
+    font-family:'JetBrains Mono',monospace;
+    font-size:.7rem; letter-spacing:.15em;
+    padding:.3rem .9rem;
+    border:1px solid var(--accent); border-radius:100px;
+    color:var(--accent); margin-bottom:1.5rem;
+    animation: pulse-border 3s infinite;
+  }
+  @keyframes pulse-border {
+    0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,0)}
+    50%{box-shadow:0 0 0 6px rgba(56,189,248,.1)}
+  }
+  .hero h1 {
+    font-size: clamp(2.2rem,5vw,4rem);
+    font-weight:800; line-height:1.1;
+    background: linear-gradient(135deg,var(--accent),var(--accent2),var(--accent3));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    background-clip:text;
+    margin-bottom:1rem;
+  }
+  .hero p {
+    font-size:1rem; color:var(--muted); max-width:600px; margin:0 auto 2rem;
+    line-height:1.7;
+  }
+
+  /* ─── STAT PILLS ─── */
+  .stats {
+    display:flex; flex-wrap:wrap; gap:.75rem; justify-content:center;
+    margin: 2rem 0;
+  }
+  .stat-pill {
+    display:flex; align-items:center; gap:.5rem;
+    padding:.45rem 1rem;
+    background: var(--bg2); border:1px solid var(--border); border-radius:100px;
+    font-size:.78rem; font-family:'JetBrains Mono',monospace;
+  }
+  .stat-pill .dot { width:7px; height:7px; border-radius:50%; }
+
+  /* ─── SECTION HEADERS ─── */
+  .sec-header { margin-bottom:2.5rem; }
+  .sec-tag {
+    font-family:'JetBrains Mono',monospace;
+    font-size:.65rem; letter-spacing:.18em; color:var(--accent2);
+    text-transform:uppercase; display:block; margin-bottom:.5rem;
+  }
+  .sec-title {
+    font-size:clamp(1.5rem,3vw,2rem); font-weight:800;
+    line-height:1.2;
+  }
+  .sec-sub { color:var(--muted); font-size:.9rem; margin-top:.5rem; line-height:1.6; }
+
+  /* ─── GRID CARDS ─── */
+  .card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1.25rem; }
+  .card {
+    background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+    padding:1.5rem;
+    transition: border-color .25s, transform .25s, box-shadow .25s;
+    cursor:pointer; position:relative; overflow:hidden;
+  }
+  .card::before {
+    content:'';
+    position:absolute; top:0; left:0; right:0; height:2px;
+    background: linear-gradient(90deg,transparent,var(--c,var(--accent)),transparent);
+    opacity:0; transition:opacity .3s;
+  }
+  .card:hover { transform:translateY(-3px); border-color:rgba(99,179,237,0.4); box-shadow:var(--glow); }
+  .card:hover::before { opacity:1; }
+  .card-icon { font-size:1.6rem; margin-bottom:.75rem; }
+  .card-title { font-size:1rem; font-weight:700; margin-bottom:.4rem; }
+  .card-desc { font-size:.82rem; color:var(--muted); line-height:1.6; }
+  .card-tag {
+    display:inline-block; margin-top:.75rem;
+    font-size:.65rem; font-family:'JetBrains Mono',monospace;
+    padding:.2rem .6rem; border-radius:4px;
+    background:rgba(56,189,248,.08); color:var(--accent); border:1px solid rgba(56,189,248,.2);
+  }
+
+  /* ─── ARCHITECTURE DIAGRAM ─── */
+  .arch-container {
+    background:var(--bg2); border:1px solid var(--border); border-radius:16px;
+    padding:2rem; overflow-x:auto;
+  }
+  .arch-diagram {
+    display:flex; flex-direction:column; align-items:center; gap:0;
+    min-width:600px; position:relative;
+  }
+
+  .arch-row { display:flex; gap:1.5rem; justify-content:center; align-items:center; width:100%; }
+
+  .arch-node {
+    border-radius:10px; padding:1rem 1.25rem;
+    text-align:center; position:relative;
+    min-width:130px; flex:1; max-width:200px;
+    border:1px solid; transition:all .3s;
+  }
+  .arch-node:hover { transform:scale(1.03); }
+  .arch-node.master { background:rgba(56,189,248,.05); border-color:rgba(56,189,248,.4); }
+  .arch-node.redis  { background:rgba(239,68,68,.05); border-color:rgba(239,68,68,.4); }
+  .arch-node.node-a { background:rgba(52,211,153,.05); border-color:rgba(52,211,153,.4); }
+  .arch-node.node-b { background:rgba(129,140,248,.05); border-color:rgba(129,140,248,.4); }
+  .arch-node.react  { background:rgba(251,146,60,.05); border-color:rgba(251,146,60,.4); }
+  .arch-node-title { font-size:.75rem; font-weight:700; letter-spacing:.05em; }
+  .arch-node-sub   { font-size:.65rem; color:var(--muted); margin-top:.2rem; font-family:'JetBrains Mono',monospace; }
+
+  .arch-arrow {
+    display:flex; flex-direction:column; align-items:center;
+    gap:.25rem; padding:.25rem 0;
+  }
+  .arch-arrow-line {
+    width:2px; height:32px;
+    background:linear-gradient(to bottom,rgba(56,189,248,.5),rgba(129,140,248,.5));
+    position:relative;
+  }
+  .arch-arrow-line::after {
+    content:'▼'; position:absolute; bottom:-14px; left:50%;
+    transform:translateX(-50%);
+    color:var(--accent2); font-size:.7rem;
+  }
+  .arch-arrow-label {
+    font-size:.6rem; color:var(--muted); font-family:'JetBrains Mono',monospace;
+    white-space:nowrap;
+  }
+
+  .arch-horiz-container {
+    display:flex; gap:1.5rem; width:100%; justify-content:center;
+    position:relative; padding-top:1rem;
+  }
+  .arch-horiz-container::before {
+    content:'';
+    position:absolute; top:0; left:15%; right:15%; height:2px;
+    background:linear-gradient(90deg,transparent,rgba(52,211,153,.4),rgba(129,140,248,.4),transparent);
+  }
+
+  /* ─── FLOW ANIMATION ─── */
+  .flow-demo {
+    background:var(--bg2); border:1px solid var(--border); border-radius:16px;
+    padding:2rem;
+  }
+  .flow-steps { display:flex; flex-direction:column; gap:0; }
+  .flow-step {
+    display:flex; gap:1.25rem; align-items:flex-start;
+    padding:1rem 0;
+    opacity:.3; transition:opacity .4s;
+    position:relative;
+  }
+  .flow-step.active { opacity:1; }
+  .flow-step + .flow-step::before {
+    content:'';
+    position:absolute; top:0; left:22px; width:1px; height:100%;
+    background:linear-gradient(to bottom,var(--border),transparent);
+    z-index:0;
+  }
+  .flow-step-num {
+    width:44px; height:44px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:.8rem; font-weight:700; font-family:'JetBrains Mono',monospace;
+    border:2px solid var(--border); background:var(--bg);
+    transition: border-color .3s, background .3s, box-shadow .3s;
+    z-index:1; position:relative;
+  }
+  .flow-step.active .flow-step-num {
+    border-color:var(--accent); background:rgba(56,189,248,.1);
+    box-shadow: 0 0 16px rgba(56,189,248,.3);
+  }
+  .flow-step-content { flex:1; padding-top:.5rem; }
+  .flow-step-title { font-size:.9rem; font-weight:700; }
+  .flow-step-desc { font-size:.8rem; color:var(--muted); margin-top:.3rem; line-height:1.5; }
+  .flow-step-code {
+    margin-top:.6rem; padding:.6rem .8rem;
+    background:var(--bg); border-radius:6px; border:1px solid var(--border);
+    font-family:'JetBrains Mono',monospace; font-size:.7rem; color:var(--accent3);
+    white-space:pre-wrap; line-height:1.4;
+  }
+  .flow-controls { display:flex; gap:.75rem; margin-top:1.5rem; }
+  .btn {
+    padding:.5rem 1.25rem; border-radius:8px;
+    font-size:.78rem; font-weight:700; font-family:'Syne',sans-serif;
+    cursor:pointer; border:1px solid; transition:all .2s;
+    letter-spacing:.04em;
+  }
+  .btn-primary { background:rgba(56,189,248,.1); border-color:var(--accent); color:var(--accent); }
+  .btn-primary:hover { background:rgba(56,189,248,.2); box-shadow:var(--glow); }
+  .btn-ghost { background:transparent; border-color:var(--border); color:var(--muted); }
+  .btn-ghost:hover { border-color:var(--text); color:var(--text); }
+
+  /* ─── IO EXAMPLE ─── */
+  .io-container { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; }
+  @media(max-width:650px){ .io-container{grid-template-columns:1fr;} }
+  .io-box {
+    background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+    padding:1.25rem; position:relative;
+  }
+  .io-label {
+    font-size:.65rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+    font-family:'JetBrains Mono',monospace;
+    position:absolute; top:-9px; left:12px;
+    background:var(--bg2); padding:0 .4rem;
+  }
+  .io-label.input { color:var(--accent); }
+  .io-label.output { color:var(--accent3); }
+  .io-content { font-family:'JetBrains Mono',monospace; font-size:.75rem; line-height:1.7; }
+  .io-content .key { color:var(--accent2); }
+  .io-content .val { color:var(--accent3); }
+  .io-content .str { color:var(--accent4); }
+  .io-content .comment { color:var(--muted); }
+
+  /* ─── CHAIN DIAGRAM ─── */
+  .chain-modes { display:flex; flex-direction:column; gap:1.5rem; }
+  .chain-mode {
+    background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+    padding:1.5rem;
+  }
+  .chain-mode-title {
+    display:flex; align-items:center; gap:.75rem;
+    font-size:.9rem; font-weight:700; margin-bottom:1rem;
+  }
+  .chain-badge {
+    font-size:.65rem; font-family:'JetBrains Mono',monospace;
+    padding:.2rem .55rem; border-radius:4px; font-weight:400;
+  }
+  .badge-seq { background:rgba(56,189,248,.1); color:var(--accent); border:1px solid rgba(56,189,248,.3); }
+  .badge-par { background:rgba(52,211,153,.1); color:var(--accent3); border:1px solid rgba(52,211,153,.3); }
+  .badge-rtr { background:rgba(244,114,182,.1); color:var(--accent4); border:1px solid rgba(244,114,182,.3); }
+
+  .chain-visual { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  .chain-agent {
+    padding:.5rem .9rem; border-radius:8px;
+    font-size:.72rem; font-family:'JetBrains Mono',monospace;
+    font-weight:600; border:1px solid;
+  }
+  .chain-arrow { color:var(--muted); font-size:1rem; }
+  .chain-par-col { display:flex; flex-direction:column; gap:.4rem; }
+  .chain-use-case { font-size:.78rem; color:var(--muted); margin-top:.75rem; font-style:italic; }
+
+  /* ─── TOOLS TABLE ─── */
+  .tools-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:.75rem; }
+  .tool-card {
+    background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+    padding:1rem; display:flex; flex-direction:column; gap:.4rem;
+    transition:all .2s;
+  }
+  .tool-card:hover { border-color:rgba(99,179,237,.3); transform:translateY(-2px); }
+  .tool-name { font-family:'JetBrains Mono',monospace; font-size:.78rem; font-weight:600; }
+  .tool-cat {
+    font-size:.62rem; text-transform:uppercase; letter-spacing:.1em;
+    font-family:'JetBrains Mono',monospace;
+  }
+  .tool-priv {
+    font-size:.62rem; padding:.15rem .45rem; border-radius:4px;
+    display:inline-block; width:fit-content;
+    font-family:'JetBrains Mono',monospace;
+  }
+  .priv-ro    { background:rgba(52,211,153,.08); color:var(--accent3); border:1px solid rgba(52,211,153,.2); }
+  .priv-std   { background:rgba(56,189,248,.08); color:var(--accent);  border:1px solid rgba(56,189,248,.2); }
+  .priv-elev  { background:rgba(251,146,60,.08); color:var(--accent5);  border:1px solid rgba(251,146,60,.2); }
+  .cat-file    { color:var(--accent); }
+  .cat-web     { color:var(--accent2); }
+  .cat-code    { color:var(--accent5); }
+  .cat-office  { color:var(--accent3); }
+  .cat-know    { color:var(--accent4); }
+
+  /* ─── SECURITY LAYERS ─── */
+  .security-layers { display:flex; flex-direction:column; gap:.5rem; max-width:600px; margin:0 auto; }
+  .sec-layer {
+    display:flex; align-items:center; gap:1rem;
+    background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+    padding:1rem 1.25rem;
+    opacity:0; transform:translateX(-20px);
+    transition:all .4s;
+    cursor:pointer;
+  }
+  .sec-layer.revealed { opacity:1; transform:none; }
+  .sec-layer:hover { border-color:rgba(99,179,237,.3); }
+  .sec-layer-num {
+    width:32px; height:32px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:.75rem; font-weight:700; font-family:'JetBrains Mono',monospace;
+    background:rgba(56,189,248,.1); border:1px solid rgba(56,189,248,.3); color:var(--accent);
+  }
+  .sec-layer-info { flex:1; }
+  .sec-layer-name { font-size:.88rem; font-weight:700; }
+  .sec-layer-detail { font-size:.75rem; color:var(--muted); margin-top:.2rem; font-family:'JetBrains Mono',monospace; }
+  .sec-layer-reject {
+    font-size:.65rem; font-family:'JetBrains Mono',monospace;
+    padding:.2rem .5rem; border-radius:4px;
+    background:rgba(239,68,68,.1); color:#f87171; border:1px solid rgba(239,68,68,.2);
+    white-space:nowrap;
+  }
+
+  /* ─── PROVIDERS ─── */
+  .providers-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:1rem; }
+  .provider-card {
+    background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+    padding:1.5rem; text-align:center; transition:all .25s;
+  }
+  .provider-card:hover { transform:translateY(-4px); box-shadow:var(--glow2); border-color:rgba(129,140,248,.4); }
+  .provider-name { font-size:1.1rem; font-weight:800; margin-bottom:.4rem; }
+  .provider-cost { font-size:.72rem; font-family:'JetBrains Mono',monospace; }
+  .provider-cost.free  { color:var(--accent3); }
+  .provider-cost.paid  { color:var(--accent5); }
+  .provider-desc { font-size:.78rem; color:var(--muted); margin-top:.6rem; line-height:1.5; }
+  .provider-models {
+    margin-top:.75rem; display:flex; flex-wrap:wrap; gap:.35rem; justify-content:center;
+  }
+  .provider-model {
+    font-size:.6rem; font-family:'JetBrains Mono',monospace;
+    padding:.15rem .45rem; border-radius:4px;
+    background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--muted);
+  }
+
+  /* ─── RAG PIPELINE ─── */
+  .rag-pipeline { display:flex; flex-direction:column; gap:0; align-items:center; }
+  .rag-stage {
+    background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+    padding:1rem 1.5rem; width:100%; max-width:520px;
+    display:flex; gap:1rem; align-items:center;
+    position:relative; cursor:pointer;
+    transition:border-color .25s, box-shadow .25s;
+  }
+  .rag-stage:hover { border-color:rgba(99,179,237,.4); box-shadow:var(--glow); }
+  .rag-stage-num {
+    width:36px; height:36px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:.8rem; font-weight:700; font-family:'JetBrains Mono',monospace;
+    background:rgba(52,211,153,.1); border:1px solid rgba(52,211,153,.3); color:var(--accent3);
+  }
+  .rag-stage-info { flex:1; }
+  .rag-stage-title { font-size:.88rem; font-weight:700; }
+  .rag-stage-detail { font-size:.73rem; color:var(--muted); margin-top:.2rem; font-family:'JetBrains Mono',monospace; }
+  .rag-connector {
+    width:2px; height:24px;
+    background:linear-gradient(to bottom,rgba(52,211,153,.4),rgba(56,189,248,.4));
+    position:relative;
+  }
+  .rag-connector::after {
+    content:'▼'; position:absolute; bottom:-12px; left:50%;
+    transform:translateX(-50%);
+    color:var(--accent2); font-size:.6rem;
+  }
+
+  /* ─── USE CASES ─── */
+  .usecase-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1.25rem; }
+  .usecase-card {
+    background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+    padding:1.5rem; position:relative; overflow:hidden;
+    transition:all .25s;
+  }
+  .usecase-card:hover { transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,.3); }
+  .usecase-card::after {
+    content:'';
+    position:absolute; bottom:0; left:0; right:0; height:3px;
+    background:linear-gradient(90deg,var(--c1,var(--accent)),var(--c2,var(--accent2)));
+    opacity:0; transition:opacity .3s;
+  }
+  .usecase-card:hover::after { opacity:1; }
+  .usecase-industry {
+    font-size:.62rem; text-transform:uppercase; letter-spacing:.12em;
+    font-family:'JetBrains Mono',monospace; color:var(--muted); margin-bottom:.6rem;
+  }
+  .usecase-title { font-size:1rem; font-weight:700; margin-bottom:.5rem; }
+  .usecase-scenario { font-size:.8rem; color:var(--muted); line-height:1.6; margin-bottom:.75rem; }
+  .usecase-agents { display:flex; flex-wrap:wrap; gap:.35rem; }
+  .usecase-agent {
+    font-size:.62rem; font-family:'JetBrains Mono',monospace;
+    padding:.2rem .5rem; border-radius:4px;
+    background:rgba(129,140,248,.08); color:var(--accent2);
+    border:1px solid rgba(129,140,248,.2);
+  }
+
+  /* ─── Q&A ─── */
+  .qa-list { display:flex; flex-direction:column; gap:.75rem; }
+  .qa-item {
+    background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+    overflow:hidden; transition:border-color .25s;
+  }
+  .qa-item.open { border-color:rgba(56,189,248,.3); }
+  .qa-q {
+    padding:1.1rem 1.25rem; cursor:pointer;
+    display:flex; align-items:center; justify-content:space-between; gap:1rem;
+    font-size:.88rem; font-weight:600; line-height:1.4;
+    transition:background .2s;
+  }
+  .qa-q:hover { background:rgba(255,255,255,.02); }
+  .qa-chevron {
+    font-size:.7rem; color:var(--muted); flex-shrink:0;
+    transition:transform .25s;
+  }
+  .qa-item.open .qa-chevron { transform:rotate(180deg); color:var(--accent); }
+  .qa-a {
+    max-height:0; overflow:hidden; transition:max-height .4s ease;
+    padding:0 1.25rem;
+  }
+  .qa-item.open .qa-a { max-height:400px; padding:0 1.25rem 1.25rem; }
+  .qa-a-inner { padding-top:.75rem; border-top:1px solid var(--border); }
+  .qa-a-text { font-size:.82rem; color:var(--muted); line-height:1.7; }
+  .qa-a-code {
+    margin-top:.6rem; padding:.7rem .85rem;
+    background:var(--bg); border-radius:6px; border:1px solid var(--border);
+    font-family:'JetBrains Mono',monospace; font-size:.7rem; color:var(--accent3);
+    white-space:pre-wrap; line-height:1.4;
+  }
+  .qa-difficulty {
+    font-size:.6rem; font-family:'JetBrains Mono',monospace;
+    padding:.15rem .45rem; border-radius:4px; flex-shrink:0;
+  }
+  .diff-easy { background:rgba(52,211,153,.08); color:var(--accent3); border:1px solid rgba(52,211,153,.2); }
+  .diff-med  { background:rgba(251,146,60,.08); color:var(--accent5); border:1px solid rgba(251,146,60,.2); }
+  .diff-hard { background:rgba(244,114,182,.08); color:var(--accent4); border:1px solid rgba(244,114,182,.2); }
+  .qa-cat { font-size:.6rem; font-family:'JetBrains Mono',monospace; color:var(--muted); }
+
+  /* ─── ANIMATED DOTS ─── */
+  @keyframes float {
+    0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)}
+  }
+  .floating { animation:float 3s ease-in-out infinite; }
+
+  /* ─── DIVIDER ─── */
+  .divider { height:1px; background:var(--border); margin:2.5rem 0; }
+
+  /* ─── SCROLLBAR ─── */
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:var(--bg); }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:var(--muted); }
+
+  /* ─── TYPING CURSOR ─── */
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
+  .cursor { display:inline-block; width:2px; height:1em; background:var(--accent); animation:blink 1s infinite; vertical-align:text-bottom; margin-left:2px; }
+
+  /* ─── RESPONSIVE ─── */
+  @media(max-width:600px){ .arch-row{flex-direction:column;} }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">⬡ multi-agent</div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showSection('overview')">Overview</button>
+    <button class="nav-tab" onclick="showSection('architecture')">Architecture</button>
+    <button class="nav-tab" onclick="showSection('react-loop')">ReAct Loop</button>
+    <button class="nav-tab" onclick="showSection('chains')">Chains</button>
+    <button class="nav-tab" onclick="showSection('rag')">RAG / KB</button>
+    <button class="nav-tab" onclick="showSection('tools')">Tools</button>
+    <button class="nav-tab" onclick="showSection('security')">Security</button>
+    <button class="nav-tab" onclick="showSection('providers')">LLM Providers</button>
+    <button class="nav-tab" onclick="showSection('io')">I/O Examples</button>
+    <button class="nav-tab" onclick="showSection('usecases')">Use Cases</button>
+    <button class="nav-tab" onclick="showSection('qa')">Interview Q&A</button>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     OVERVIEW
+═══════════════════════════════════════════════════════════════ -->
+<section id="overview" class="active">
+  <div class="container">
+    <div class="hero">
+      <div class="hero-badge">Production-Ready · Distributed · Multi-Provider</div>
+      <h1>Multi-Agent AI System</h1>
+      <p>A horizontally-scalable AI framework where autonomous agents run on any machine, coordinate via Redis pub/sub, use RAG knowledge bases, and chain together in sophisticated reasoning pipelines.</p>
+
+      <div class="stats">
+        <div class="stat-pill"><div class="dot" style="background:var(--accent3)"></div>16 Built-in Tools</div>
+        <div class="stat-pill"><div class="dot" style="background:var(--accent)"></div>4 LLM Providers</div>
+        <div class="stat-pill"><div class="dot" style="background:var(--accent2)"></div>3 Chain Modes</div>
+        <div class="stat-pill"><div class="dot" style="background:var(--accent5)"></div>Redis Pub/Sub</div>
+        <div class="stat-pill"><div class="dot" style="background:var(--accent4)"></div>RAG / ChromaDB</div>
+        <div class="stat-pill"><div class="dot" style="background:#f87171"></div>4-Layer Security</div>
+      </div>
+    </div>
+
+    <div class="sec-header">
+      <span class="sec-tag">Core Concepts</span>
+      <div class="sec-title">What's in the box?</div>
+      <div class="sec-sub">Six interconnected systems that together form a production-grade, distributed AI platform.</div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card" style="--c:var(--accent)" onclick="showSection('react-loop')">
+        <div class="card-icon">🧠</div>
+        <div class="card-title">ReAct Agent</div>
+        <div class="card-desc">Each agent follows a Reason→Act loop: it thinks, calls tools, observes results, and iterates until it reaches a final answer. Sliding window memory keeps context compact.</div>
+        <div class="card-tag">core/agent.py</div>
+      </div>
+      <div class="card" style="--c:var(--accent5)" onclick="showSection('chains')">
+        <div class="card-icon">⛓</div>
+        <div class="card-title">LLM Chains</div>
+        <div class="card-desc">Compose agents into Sequential pipelines (A→B→C), Parallel fans (merge best-of-N), or Router logic (smart dispatch to the right specialist).</div>
+        <div class="card-tag">core/chain.py</div>
+      </div>
+      <div class="card" style="--c:var(--accent3)" onclick="showSection('rag')">
+        <div class="card-icon">📚</div>
+        <div class="card-title">RAG Knowledge Base</div>
+        <div class="card-desc">Upload PDFs, DOCX, XLSX, TXT, CSVs. Chunks → ChromaDB cosine index. At query time, top-N relevant chunks are injected into agent context.</div>
+        <div class="card-tag">core/knowledge/</div>
+      </div>
+      <div class="card" style="--c:var(--accent4)" onclick="showSection('tools')">
+        <div class="card-icon">🛠</div>
+        <div class="card-title">16-Tool Registry</div>
+        <div class="card-desc">File I/O, web fetch, Python execution, Excel/Word/PDF read-write, CSV manipulation, and knowledge base queries. Each tool is privilege-gated.</div>
+        <div class="card-tag">core/tools/</div>
+      </div>
+      <div class="card" style="--c:var(--accent2)" onclick="showSection('architecture')">
+        <div class="card-icon">🌐</div>
+        <div class="card-title">Distributed Nodes</div>
+        <div class="card-desc">Workers run on any PC/VPS. Master routes tasks via Redis pub/sub channels. Nodes self-register and appear live in the UI. Scale horizontally with one env var.</div>
+        <div class="card-tag">node/worker.py</div>
+      </div>
+      <div class="card" style="--c:#f87171" onclick="showSection('security')">
+        <div class="card-icon">🔐</div>
+        <div class="card-title">Security Stack</div>
+        <div class="card-desc">Rate limiting → API key HMAC auth → Node secret auth → Privilege levels → Path sandboxing → Secret redaction. Six independent layers, fully configurable.</div>
+        <div class="card-tag">core/security.py</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="sec-header">
+      <span class="sec-tag">Tech Stack</span>
+      <div class="sec-title">Technology Breakdown</div>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">⚡</div>
+        <div class="card-title">FastAPI</div>
+        <div class="card-desc">Async Python server on port :8000. Handles REST endpoints, WebSocket sessions per chat, and Server-Sent Events for streaming tokens. ASGI with uvicorn.</div>
+        <div class="card-tag">master/api/</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">⚛️</div>
+        <div class="card-title">React + Vite + Tailwind</div>
+        <div class="card-desc">Frontend SPA with live Chat, Agent CRUD, Node map, Task queue, and Knowledge upload panels. Connects to the FastAPI backend via WebSocket + REST.</div>
+        <div class="card-tag">master/frontend/</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔴</div>
+        <div class="card-title">Redis Pub/Sub</div>
+        <div class="card-desc">The message bus between master and nodes. Channels: <code>tasks:{node_id}</code> for targeted dispatch, <code>tasks:broadcast</code> for any-node, <code>results</code> for responses.</div>
+        <div class="card-tag">redis://localhost:6379</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🗃</div>
+        <div class="card-title">ChromaDB</div>
+        <div class="card-desc">Embedded vector database, persisted locally. Stores text chunks with cosine similarity index. No external service required — just a local directory.</div>
+        <div class="card-tag">./data/chroma/</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🐳</div>
+        <div class="card-title">Docker Compose</div>
+        <div class="card-desc">One command brings up: Redis, Ollama (local LLM), Master server, and a Node worker. Separate Dockerfiles for master and node allow independent scaling.</div>
+        <div class="card-tag">docker-compose.yml</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🦙</div>
+        <div class="card-title">Ollama (Local LLM)</div>
+        <div class="card-desc">Runs models like llama3.2 entirely on-device. No API key, no internet, no cost. Perfect for privacy-sensitive tasks or offline environments.</div>
+        <div class="card-tag">http://localhost:11434</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     ARCHITECTURE
+═══════════════════════════════════════════════════════════════ -->
+<section id="architecture">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">System Design</span>
+      <div class="sec-title">Architecture Diagram</div>
+      <div class="sec-sub">Hover over each component to see what it does. Click a layer to learn more.</div>
+    </div>
+
+    <div class="arch-container">
+      <div class="arch-diagram">
+
+        <!-- REACT FRONTEND -->
+        <div class="arch-row">
+          <div class="arch-node react" style="max-width:420px; width:100%; padding:1.25rem 1.5rem;">
+            <div class="arch-node-title" style="color:var(--accent5)">⚛️ React Web App</div>
+            <div class="arch-node-sub">Chat · Agents CRUD · Nodes Map · Tasks Queue · Knowledge Upload</div>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem;">
+              <span style="font-size:.58rem;padding:.15rem .4rem;border-radius:3px;background:rgba(251,146,60,.1);color:var(--accent5);border:1px solid rgba(251,146,60,.2);">Vite</span>
+              <span style="font-size:.58rem;padding:.15rem .4rem;border-radius:3px;background:rgba(251,146,60,.1);color:var(--accent5);border:1px solid rgba(251,146,60,.2);">TailwindCSS</span>
+              <span style="font-size:.58rem;padding:.15rem .4rem;border-radius:3px;background:rgba(251,146,60,.1);color:var(--accent5);border:1px solid rgba(251,146,60,.2);">WebSocket</span>
+              <span style="font-size:.58rem;padding:.15rem .4rem;border-radius:3px;background:rgba(251,146,60,.1);color:var(--accent5);border:1px solid rgba(251,146,60,.2);">SSE</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-arrow">
+          <div class="arch-arrow-label">WebSocket + REST + SSE streaming</div>
+          <div class="arch-arrow-line"></div>
+        </div>
+
+        <!-- FASTAPI MASTER -->
+        <div class="arch-row">
+          <div class="arch-node master" style="max-width:480px; width:100%; padding:1.25rem 1.5rem;">
+            <div class="arch-node-title" style="color:var(--accent)">🚀 FastAPI Master Server :8000</div>
+            <div class="arch-node-sub">/api/chat · /api/agents · /api/chains · /api/tasks · /api/nodes · /api/knowledge · /ws/{session_id}</div>
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem;">
+              <span style="font-size:.58rem;padding:.15rem .4rem;border-radius:3px;background:rgba(56,189,248,.1);color:var(--accent);border:1px solid rgba(56,189,248,.2);">Rate Limiter</span>
+              <span style="font-size:.58rem;padding:.15rem .4rem;border-radius:3px;background:rgba(56,189,248,.1);color:var(--accent);border:1px solid rgba(56,189,248,.2);">API Key Auth</span>
+              <span style="font-size:.58rem;padding:.15rem .4rem;border-radius:3px;background:rgba(56,189,248,.1);color:var(--accent);border:1px solid rgba(56,189,248,.2);">WS Manager</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-arrow">
+          <div class="arch-arrow-label">pub/sub channels</div>
+          <div class="arch-arrow-line"></div>
+        </div>
+
+        <!-- REDIS -->
+        <div class="arch-row">
+          <div class="arch-node redis" style="max-width:420px; width:100%; padding:1.25rem 1.5rem;">
+            <div class="arch-node-title" style="color:#f87171">🔴 Redis :6379 — Message Bus</div>
+            <div class="arch-node-sub">tasks:{node_id} · tasks:broadcast · results</div>
+          </div>
+        </div>
+
+        <div class="arch-arrow">
+          <div class="arch-arrow-label" style="color:var(--muted)">subscribed workers on any machine</div>
+          <div class="arch-arrow-line"></div>
+        </div>
+
+        <!-- NODES -->
+        <div class="arch-horiz-container">
+          <div class="arch-node node-a" style="padding:1.25rem 1rem; flex:1; max-width:220px;">
+            <div class="arch-node-title" style="color:var(--accent3)">💻 Node (Laptop)</div>
+            <div class="arch-node-sub" style="margin-top:.4rem;">Agent A · Ollama<br>Agent B · Groq</div>
+            <div class="arch-node-sub" style="margin-top:.35rem;color:rgba(52,211,153,.5)">ChromaDB · 16 Tools</div>
+          </div>
+          <div class="arch-node node-b" style="padding:1.25rem 1rem; flex:1; max-width:220px;">
+            <div class="arch-node-title" style="color:var(--accent2)">🖥 Node (Server)</div>
+            <div class="arch-node-sub" style="margin-top:.4rem;">Agent C · OpenAI<br>Agent D · Anthropic</div>
+            <div class="arch-node-sub" style="margin-top:.35rem;color:rgba(129,140,248,.5)">ChromaDB · 16 Tools</div>
+          </div>
+          <div class="arch-node" style="padding:1.25rem 1rem; flex:1; max-width:220px; border-style:dashed; opacity:.5;">
+            <div class="arch-node-title" style="color:var(--muted)">+ Add Node</div>
+            <div class="arch-node-sub" style="margin-top:.4rem;">Any PC/VPS<br>1 env var to join</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sec-header">
+      <span class="sec-tag">Directory Layout</span>
+      <div class="sec-title">Code Structure</div>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title" style="font-family:monospace;color:var(--accent)">core/</div>
+        <div class="card-desc">The framework heart. Contains: agent.py (ReAct), chain.py (Sequential/Parallel/Router), orchestrator.py (multi-agent coordinator), memory.py (sliding window), security.py, providers/, tools/, knowledge/.</div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="font-family:monospace;color:var(--accent5)">master/</div>
+        <div class="card-desc">Control plane. api/ holds the FastAPI app, routes, and WebSocket manager. frontend/ is the React Vite app served statically. Everything the user touches.</div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="font-family:monospace;color:var(--accent3)">node/</div>
+        <div class="card-desc">worker.py connects to Redis, subscribes to task channels, instantiates an Orchestrator, executes agent tasks, and publishes results back. One file, one responsibility.</div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="font-family:monospace;color:var(--accent2)">config/</div>
+        <div class="card-desc">agents.yaml defines every agent: name, provider, model, system prompt, tools, privilege level, chain membership. system.yaml holds defaults. No code changes needed to reconfigure agents.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     REACT LOOP
+═══════════════════════════════════════════════════════════════ -->
+<section id="react-loop">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">core/agent.py</span>
+      <div class="sec-title">The ReAct Agent Loop</div>
+      <div class="sec-sub">ReAct = Reason + Act. Each agent iterates: think about what to do → call a tool → observe the result → update memory → repeat until final answer or max iterations reached.</div>
+    </div>
+
+    <div class="flow-demo">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+        <div style="font-size:.82rem;font-weight:700;color:var(--muted);">Example Task: <span style="color:var(--text)">"Summarize Q3 sales from the Excel file and compare to last year's PDF report"</span></div>
+        <div id="step-counter" style="font-family:monospace;font-size:.75rem;color:var(--muted);">Step 1/7</div>
+      </div>
+
+      <div class="flow-steps" id="react-steps">
+        <div class="flow-step active">
+          <div class="flow-step-num">1</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">📥 User Input Received</div>
+            <div class="flow-step-desc">The task is received and added to the agent's memory (sliding window, keeps last N turns).</div>
+            <div class="flow-step-code">memory.add("user", "Summarize Q3 sales from Excel, compare to last year PDF")</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">2</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">🧠 LLM Reasons → Decides Tool Call</div>
+            <div class="flow-step-desc">The LLM sees memory + system prompt. It reasons: "I need to read the Excel file first." It emits a structured tool call.</div>
+            <div class="flow-step-code">{"tool": "read_excel", "args": {"path": "workspace/q3_sales.xlsx"}}</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">3</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">⚙️ Tool Dispatcher Executes</div>
+            <div class="flow-step-desc">security.py checks privilege (STANDARD ≥ READ_ONLY ✓) and path sandbox (workspace/ ✓). Tool runs, returns sheet data.</div>
+            <div class="flow-step-code">tool_result = {"Q3 Total": 4_200_000, "Best Product": "Widget X", rows: [...]}</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">4</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">📝 Result Appended to Memory</div>
+            <div class="flow-step-desc">Tool result goes into memory as a tool-role message. The loop continues — now the LLM knows the Excel data.</div>
+            <div class="flow-step-code">memory.add("tool", tool_result)  # injected into next LLM call</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">5</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">🔁 Loop Iteration 2 — Read PDF</div>
+            <div class="flow-step-desc">LLM now asks for the second piece of data: last year's PDF report. Another tool call, same dispatch cycle.</div>
+            <div class="flow-step-code">{"tool": "read_pdf", "args": {"path": "workspace/q3_2023_report.pdf"}}</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">6</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">🔍 Secret Redaction Applied</div>
+            <div class="flow-step-desc">Before any output reaches the user or other agents, security.py runs regex redaction — API keys, tokens, passwords become [REDACTED].</div>
+            <div class="flow-step-code">output = redact_secrets(llm_response)  # e.g. "sk-abc..." → "[REDACTED]"</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-step-num">7</div>
+          <div class="flow-step-content">
+            <div class="flow-step-title">✅ Final Answer Streamed</div>
+            <div class="flow-step-desc">LLM has all data, produces a plain-text final answer. No more tool calls. Result streamed via WebSocket/SSE to the React frontend.</div>
+            <div class="flow-step-code">"Q3 2024 sales totalled €4.2M (+18% vs Q3 2023 €3.56M). Top performer: Widget X..."</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-controls">
+        <button class="btn btn-primary" onclick="reactNext()">▶ Next Step</button>
+        <button class="btn btn-ghost" onclick="reactReset()">↺ Reset</button>
+        <div id="react-note" style="font-size:.75rem;color:var(--muted);padding:.5rem 0;"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="sec-header">
+      <span class="sec-tag">core/memory.py</span>
+      <div class="sec-title">Sliding Window Memory</div>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">What it does</div>
+        <div class="card-desc">Keeps the last N conversation turns in memory. When the window is full, the oldest message is dropped. This keeps the LLM context within token limits without losing recent context.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Why not infinite?</div>
+        <div class="card-desc">Every LLM has a context window limit (e.g. 8K, 32K, 128K tokens). Sending the full history every time is expensive. Sliding window balances recency vs. cost.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Message roles</div>
+        <div class="card-desc">Memory stores messages by role: <code style="color:var(--accent)">system</code> (agent persona), <code style="color:var(--accent3)">user</code> (task), <code style="color:var(--accent2)">assistant</code> (LLM output), <code style="color:var(--accent4)">tool</code> (tool results). Each role shapes LLM behavior.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     CHAINS
+═══════════════════════════════════════════════════════════════ -->
+<section id="chains">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">core/chain.py</span>
+      <div class="sec-title">LLM Chain Modes</div>
+      <div class="sec-sub">Agents are more powerful together. Three composition patterns let you build sophisticated multi-step AI pipelines from simple building blocks.</div>
+    </div>
+
+    <div class="chain-modes">
+      <div class="chain-mode">
+        <div class="chain-mode-title">
+          <span>Sequential Chain</span>
+          <span class="chain-badge badge-seq">A → B → C</span>
+        </div>
+        <div class="chain-visual">
+          <div class="chain-agent" style="border-color:rgba(56,189,248,.4);color:var(--accent);">Input</div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-agent" style="border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.05);">Agent A<br><span style="font-size:.6rem;color:var(--muted);">Researcher</span></div>
+          <div class="chain-arrow">→ output →</div>
+          <div class="chain-agent" style="border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.05);">Agent B<br><span style="font-size:.6rem;color:var(--muted);">Writer</span></div>
+          <div class="chain-arrow">→ output →</div>
+          <div class="chain-agent" style="border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.05);">Agent C<br><span style="font-size:.6rem;color:var(--muted);">Reviewer</span></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-agent" style="border-color:rgba(56,189,248,.4);color:var(--accent);">Final</div>
+        </div>
+        <div class="chain-use-case">📌 Use case: Research → Draft article → QA check. Each agent's output becomes the next agent's input. Best for linear refinement workflows.</div>
+      </div>
+
+      <div class="chain-mode">
+        <div class="chain-mode-title">
+          <span>Parallel Chain</span>
+          <span class="chain-badge badge-par">[A, B, C] → merge</span>
+        </div>
+        <div class="chain-visual" style="align-items:flex-start;">
+          <div class="chain-agent" style="border-color:rgba(52,211,153,.4);color:var(--accent3);align-self:center;">Input</div>
+          <div class="chain-arrow" style="align-self:center;">→</div>
+          <div class="chain-par-col">
+            <div class="chain-agent" style="border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.05);">Agent A · Angle 1</div>
+            <div class="chain-agent" style="border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.05);">Agent B · Angle 2</div>
+            <div class="chain-agent" style="border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.05);">Agent C · Angle 3</div>
+          </div>
+          <div class="chain-arrow" style="align-self:center;">→ all results →</div>
+          <div class="chain-agent" style="border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.08);align-self:center;">Merge<br>Agent</div>
+          <div class="chain-arrow" style="align-self:center;">→</div>
+          <div class="chain-agent" style="border-color:rgba(52,211,153,.4);color:var(--accent3);align-self:center;">Final</div>
+        </div>
+        <div class="chain-use-case">📌 Use case: Get three financial analysts' opinions simultaneously, then merge into a consensus report. Reduces latency for independent tasks.</div>
+      </div>
+
+      <div class="chain-mode">
+        <div class="chain-mode-title">
+          <span>Router Chain</span>
+          <span class="chain-badge badge-rtr">smart dispatch</span>
+        </div>
+        <div class="chain-visual">
+          <div class="chain-agent" style="border-color:rgba(244,114,182,.4);color:var(--accent4);">Input</div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-agent" style="border-color:rgba(244,114,182,.4);background:rgba(244,114,182,.05);">Router Agent<br><span style="font-size:.6rem;color:var(--muted);">"use Agent B"</span></div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-par-col">
+            <div class="chain-agent" style="border-color:rgba(244,114,182,.2);color:var(--muted);font-size:.65rem;">Agent A · Code</div>
+            <div class="chain-agent" style="border-color:rgba(244,114,182,.5);background:rgba(244,114,182,.08);color:var(--accent4);">Agent B · Finance ✓</div>
+            <div class="chain-agent" style="border-color:rgba(244,114,182,.2);color:var(--muted);font-size:.65rem;">Agent C · Legal</div>
+          </div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-agent" style="border-color:rgba(244,114,182,.4);color:var(--accent4);">Final</div>
+        </div>
+        <div class="chain-use-case">📌 Use case: Customer support bot that routes coding questions to the engineer agent, billing questions to the finance agent, contract questions to the legal agent.</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sec-header">
+      <span class="sec-tag">core/orchestrator.py</span>
+      <div class="sec-title">Orchestrator</div>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">Role</div>
+        <div class="card-desc">Lives inside each node worker. Receives a task from Redis, looks up which chain/agent to invoke from config, executes it, and publishes the result back to the results channel.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Config-driven</div>
+        <div class="card-desc">No code changes to reconfigure agents. Just update agents.yaml: add a new agent, change its model, swap its chain membership. The orchestrator reads it at startup.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Fault isolation</div>
+        <div class="card-desc">If one node crashes, tasks requeue (or time out). Other nodes keep running. The master's WebSocket manager handles graceful disconnects and reconnects.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     RAG
+═══════════════════════════════════════════════════════════════ -->
+<section id="rag">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">core/knowledge/</span>
+      <div class="sec-title">RAG Knowledge Pipeline</div>
+      <div class="sec-sub">Retrieval-Augmented Generation. Instead of fine-tuning, you feed the LLM relevant document chunks at query time. Click each stage to expand details.</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start;">
+      <div class="rag-pipeline" id="rag-pipeline">
+        <div class="rag-stage" onclick="expandRag(0)">
+          <div class="rag-stage-num">1</div>
+          <div class="rag-stage-info">
+            <div class="rag-stage-title">📎 File Ingestion</div>
+            <div class="rag-stage-detail">PDF → pypdf · DOCX → python-docx · XLSX → openpyxl · TXT/MD/CSV → plain text</div>
+          </div>
+          <div style="color:var(--muted);font-size:.75rem;">▼</div>
+        </div>
+        <div class="rag-connector"></div>
+        <div class="rag-stage" onclick="expandRag(1)">
+          <div class="rag-stage-num">2</div>
+          <div class="rag-stage-info">
+            <div class="rag-stage-title">✂️ Text Chunking</div>
+            <div class="rag-stage-detail">1000 char chunks · 200 char overlap · preserves context at boundaries</div>
+          </div>
+          <div style="color:var(--muted);font-size:.75rem;">▼</div>
+        </div>
+        <div class="rag-connector"></div>
+        <div class="rag-stage" onclick="expandRag(2)">
+          <div class="rag-stage-num">3</div>
+          <div class="rag-stage-info">
+            <div class="rag-stage-title">🔢 Embedding</div>
+            <div class="rag-stage-detail">ChromaDB default embedder · cosine similarity index · persistent ./data/chroma/</div>
+          </div>
+          <div style="color:var(--muted);font-size:.75rem;">▼</div>
+        </div>
+        <div class="rag-connector"></div>
+        <div class="rag-stage" onclick="expandRag(3)">
+          <div class="rag-stage-num">4</div>
+          <div class="rag-stage-info">
+            <div class="rag-stage-title">🔍 Similarity Retrieval</div>
+            <div class="rag-stage-detail">query_knowledge_base(query, n=5) → top-N chunks + scores</div>
+          </div>
+          <div style="color:var(--muted);font-size:.75rem;">▼</div>
+        </div>
+        <div class="rag-connector"></div>
+        <div class="rag-stage" onclick="expandRag(4)">
+          <div class="rag-stage-num">5</div>
+          <div class="rag-stage-info">
+            <div class="rag-stage-title">💬 Context Injection</div>
+            <div class="rag-stage-detail">chunks injected into agent system prompt before LLM call</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="rag-detail" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.5rem;min-height:280px;">
+        <div style="color:var(--muted);font-size:.82rem;text-align:center;padding-top:2rem;">
+          👈 Click a stage to see details
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sec-header">
+      <span class="sec-tag">Why RAG vs Fine-tuning?</span>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">✅ RAG Advantages</div>
+        <div class="card-desc">No model retraining. Update knowledge by uploading new files. Works with any LLM provider. Transparent — you can see which chunks influenced the answer. Cheap.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">⚠️ RAG Limitations</div>
+        <div class="card-desc">Only as good as the retrieval step. If the right chunk isn't in the top-N results, the LLM won't see it. Chunk size/overlap tuning matters a lot for quality.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔧 This Implementation</div>
+        <div class="card-desc">1000-char chunks with 200-char overlap is a pragmatic default. The overlap ensures sentences split across chunk boundaries aren't lost. ChromaDB handles embedding + retrieval.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TOOLS
+═══════════════════════════════════════════════════════════════ -->
+<section id="tools">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">core/tools/</span>
+      <div class="sec-title">16 Built-in Tools</div>
+      <div class="sec-sub">Each tool is registered in a central registry. Agents declare which tools they can use in agents.yaml. All tools go through privilege checking and path sandboxing before execution.</div>
+    </div>
+
+    <div class="tools-grid">
+      <div class="tool-card"><div class="tool-name">read_file</div><div class="tool-cat cat-file">File</div><div class="tool-priv priv-ro">READ_ONLY</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Reads any text file within the sandbox. Path is resolved and checked against ALLOWED_DIRS before access.</div></div>
+      <div class="tool-card"><div class="tool-name">write_file</div><div class="tool-cat cat-file">File</div><div class="tool-priv priv-std">STANDARD</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Creates or overwrites a file within the sandbox. Requires STANDARD privilege — not available to read-only agents.</div></div>
+      <div class="tool-card"><div class="tool-name">list_directory</div><div class="tool-cat cat-file">File</div><div class="tool-priv priv-ro">READ_ONLY</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Lists contents of a sandbox directory. Useful for agents that need to discover available files before reading them.</div></div>
+      <div class="tool-card"><div class="tool-name">search_in_files</div><div class="tool-cat cat-file">File</div><div class="tool-priv priv-ro">READ_ONLY</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Grep-like text search across files in the sandbox. Returns matching lines with file/line context.</div></div>
+      <div class="tool-card"><div class="tool-name">fetch_webpage</div><div class="tool-cat cat-web">Web</div><div class="tool-priv priv-ro">READ_ONLY</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">HTTP GET a URL and return the page text. Used for live web research during agent reasoning loops.</div></div>
+      <div class="tool-card"><div class="tool-name">http_request</div><div class="tool-cat cat-web">Web</div><div class="tool-priv priv-std">STANDARD</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Full HTTP method support (GET/POST/PUT). Allows agents to interact with APIs, webhooks, or data sources.</div></div>
+      <div class="tool-card"><div class="tool-name">execute_python</div><div class="tool-cat cat-code">Code</div><div class="tool-priv priv-elev">ELEVATED</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Runs Python code in a subprocess. Requires ELEVATED privilege. Powerful but gated — never available to basic agents.</div></div>
+      <div class="tool-card"><div class="tool-name">execute_shell</div><div class="tool-cat cat-code">Code</div><div class="tool-priv priv-elev">ELEVATED</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Shell command execution. ELEVATED only. Combine with path sandbox to constrain blast radius.</div></div>
+      <div class="tool-card"><div class="tool-name">read_excel</div><div class="tool-cat cat-office">Office</div><div class="tool-priv priv-ro">READ_ONLY</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Parses .xlsx via openpyxl. Returns sheet data as structured text the LLM can reason over.</div></div>
+      <div class="tool-card"><div class="tool-name">write_excel</div><div class="tool-cat cat-office">Office</div><div class="tool-priv priv-std">STANDARD</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Creates or updates Excel files. Agents can generate spreadsheets as final deliverables.</div></div>
+      <div class="tool-card"><div class="tool-name">read_word</div><div class="tool-cat cat-office">Office</div><div class="tool-priv priv-ro">READ_ONLY</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Extracts text from .docx via python-docx. Useful for agents analyzing contracts or documentation.</div></div>
+      <div class="tool-card"><div class="tool-name">write_word</div><div class="tool-cat cat-office">Office</div><div class="tool-priv priv-std">STANDARD</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Generates .docx documents from agent output. Reports, summaries, or structured deliverables.</div></div>
+      <div class="tool-card"><div class="tool-name">read_pdf</div><div class="tool-cat cat-office">Office</div><div class="tool-priv priv-ro">READ_ONLY</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Extracts text from PDFs via pypdf. Combined with RAG, can search semantically across entire PDF libraries.</div></div>
+      <div class="tool-card"><div class="tool-name">read_csv</div><div class="tool-cat cat-office">Office</div><div class="tool-priv priv-ro">READ_ONLY</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Parses CSV files into tabular text. Agents can then analyze, filter, or aggregate the data.</div></div>
+      <div class="tool-card"><div class="tool-name">write_csv</div><div class="tool-cat cat-office">Office</div><div class="tool-priv priv-std">STANDARD</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Writes structured data to CSV. Useful for data pipeline agents that produce machine-readable output.</div></div>
+      <div class="tool-card"><div class="tool-name">query_knowledge_base</div><div class="tool-cat cat-know">Knowledge</div><div class="tool-priv priv-ro">READ_ONLY</div><div class="card-desc" style="font-size:.72rem;margin-top:.4rem;">Semantic search against ChromaDB. Returns top-N chunks from the RAG index relevant to the query string.</div></div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sec-header">
+      <span class="sec-tag">Privilege Levels</span>
+      <div class="sec-title">Tool Access Control</div>
+    </div>
+    <div class="card-grid">
+      <div class="card"><div class="card-title" style="color:var(--accent3)">Level 0 — READ_ONLY</div><div class="card-desc">Can only read: files, web pages, Excel, Word, PDF, CSV, knowledge base. Zero write or execution capability. Safe for untrusted inputs.</div></div>
+      <div class="card"><div class="card-title" style="color:var(--accent)">Level 1 — STANDARD</div><div class="card-desc">Adds write tools: write_file, http_request (POST), write_excel/word/csv. Still no code execution. Good for productivity agents.</div></div>
+      <div class="card"><div class="card-title" style="color:var(--accent5)">Level 2 — ELEVATED</div><div class="card-desc">Unlocks execute_python and execute_shell. Reserved for trusted automation agents. Path sandbox still applies.</div></div>
+      <div class="card"><div class="card-title" style="color:var(--accent4)">Level 3 — ADMIN</div><div class="card-desc">Full unrestricted access. System management tasks only. Never assign to user-facing agents.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SECURITY
+═══════════════════════════════════════════════════════════════ -->
+<section id="security">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">core/security.py</span>
+      <div class="sec-title">6-Layer Security Stack</div>
+      <div class="sec-sub">Every HTTP request passes through sequential security layers. Click "Reveal Layers" to see them appear one by one, simulating a request travelling through the stack.</div>
+    </div>
+
+    <div style="text-align:center;margin-bottom:1.5rem;">
+      <button class="btn btn-primary" onclick="revealSecurity()">▶ Simulate Request</button>
+      <button class="btn btn-ghost" onclick="resetSecurity()" style="margin-left:.75rem;">↺ Reset</button>
+    </div>
+
+    <div class="security-layers" id="security-layers">
+      <div class="sec-layer" data-delay="0">
+        <div class="sec-layer-num">1</div>
+        <div class="sec-layer-info">
+          <div class="sec-layer-name">Rate Limiter</div>
+          <div class="sec-layer-detail">token-bucket per IP · 60 req/60s default · configurable via RATE_LIMIT_* env vars</div>
+        </div>
+        <div class="sec-layer-reject">→ 429 Too Many Requests</div>
+      </div>
+      <div class="sec-layer" data-delay="400">
+        <div class="sec-layer-num">2</div>
+        <div class="sec-layer-info">
+          <div class="sec-layer-name">API Key Auth</div>
+          <div class="sec-layer-detail">X-API-Key header · HMAC constant-time compare · disabled if MASTER_API_KEYS not set (dev mode)</div>
+        </div>
+        <div class="sec-layer-reject">→ 401 Unauthorized</div>
+      </div>
+      <div class="sec-layer" data-delay="800">
+        <div class="sec-layer-num">3</div>
+        <div class="sec-layer-info">
+          <div class="sec-layer-name">Node Secret Auth</div>
+          <div class="sec-layer-detail">X-Node-Secret header · only for node registration endpoints · prevents rogue node injection</div>
+        </div>
+        <div class="sec-layer-reject">→ 403 Forbidden</div>
+      </div>
+      <div class="sec-layer" data-delay="1200">
+        <div class="sec-layer-num">4</div>
+        <div class="sec-layer-info">
+          <div class="sec-layer-name">Privilege Level Gate</div>
+          <div class="sec-layer-detail">per-agent privilege (0–3) checked against each tool's min_privilege before execution</div>
+        </div>
+        <div class="sec-layer-reject">→ PermissionError</div>
+      </div>
+      <div class="sec-layer" data-delay="1600">
+        <div class="sec-layer-num">5</div>
+        <div class="sec-layer-info">
+          <div class="sec-layer-name">Path Sandbox</div>
+          <div class="sec-layer-detail">resolves symlinks · checks all file paths against ALLOWED_DIRS whitelist · no traversal</div>
+        </div>
+        <div class="sec-layer-reject">→ PermissionError</div>
+      </div>
+      <div class="sec-layer" data-delay="2000">
+        <div class="sec-layer-num">6</div>
+        <div class="sec-layer-info">
+          <div class="sec-layer-name">Secret Redactor</div>
+          <div class="sec-layer-detail">regex strips API keys, tokens, passwords from all LLM output before it leaves the system</div>
+        </div>
+        <div class="sec-layer-reject">→ [REDACTED]</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sec-header">
+      <span class="sec-tag">Why each layer matters</span>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">HMAC Constant-Time Compare</div>
+        <div class="card-desc">Regular string comparison leaks timing information — an attacker can guess keys character by character by measuring response time. HMAC compare takes the same time regardless of where strings differ.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Symlink Resolution</div>
+        <div class="card-desc">A path like <code style="color:var(--accent)">workspace/../../etc/passwd</code> could escape the sandbox. By resolving symlinks and canonicalizing before checking, traversal attacks are neutralized.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Secret Redaction</div>
+        <div class="card-desc">LLMs sometimes echo back secrets from their context (API keys in env vars, database passwords in config files). The redactor ensures even if a secret enters the prompt, it never leaves in the response.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     PROVIDERS
+═══════════════════════════════════════════════════════════════ -->
+<section id="providers">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">core/providers/</span>
+      <div class="sec-title">LLM Providers</div>
+      <div class="sec-sub">Each agent independently chooses its LLM provider. Mix and match on the same node — run one agent on local Ollama, another on GPT-4o, another on Claude.</div>
+    </div>
+
+    <div class="providers-grid">
+      <div class="provider-card">
+        <div class="provider-name">🦙 Ollama</div>
+        <div class="provider-cost free">FREE · Local</div>
+        <div class="provider-desc">Runs models entirely on-device. No API key, no internet, no cost, maximum privacy. Best for sensitive data or offline environments.</div>
+        <div class="provider-models">
+          <span class="provider-model">llama3.2</span>
+          <span class="provider-model">mistral</span>
+          <span class="provider-model">codellama</span>
+          <span class="provider-model">phi3</span>
+        </div>
+      </div>
+      <div class="provider-card">
+        <div class="provider-name">⚡ Groq</div>
+        <div class="provider-cost free">Free Tier · Cloud</div>
+        <div class="provider-desc">Ultra-fast LPU inference. Free tier is generous. Best for latency-sensitive tasks where you want cloud speed without per-token cost.</div>
+        <div class="provider-models">
+          <span class="provider-model">llama3-70b</span>
+          <span class="provider-model">mixtral-8x7b</span>
+          <span class="provider-model">gemma-7b</span>
+        </div>
+      </div>
+      <div class="provider-card">
+        <div class="provider-name">🟢 OpenAI</div>
+        <div class="provider-cost paid">Paid · Cloud</div>
+        <div class="provider-desc">GPT-4o. Highest general capability. Best for complex reasoning, code generation, and when quality is more important than cost.</div>
+        <div class="provider-models">
+          <span class="provider-model">gpt-4o</span>
+          <span class="provider-model">gpt-4o-mini</span>
+          <span class="provider-model">gpt-3.5-turbo</span>
+        </div>
+      </div>
+      <div class="provider-card">
+        <div class="provider-name">⬡ Anthropic</div>
+        <div class="provider-cost paid">Paid · Cloud</div>
+        <div class="provider-desc">Claude family. Best for long-context analysis, nuanced instructions, and tasks requiring careful reasoning over large documents.</div>
+        <div class="provider-models">
+          <span class="provider-model">claude-opus-4</span>
+          <span class="provider-model">claude-sonnet-4</span>
+          <span class="provider-model">claude-haiku</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="sec-header">
+      <span class="sec-tag">How to choose</span>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">Privacy-first?</div>
+        <div class="card-desc">→ Ollama. Data never leaves your machine. Slower, needs GPU for good performance, but fully sovereign. Use llama3.2 or mistral.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Speed matters?</div>
+        <div class="card-desc">→ Groq. Their LPU hardware is 10–20× faster than typical GPU inference. Free tier covers most dev workloads.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Max quality?</div>
+        <div class="card-desc">→ OpenAI GPT-4o or Anthropic Claude. For tasks like complex code review, long document analysis, or nuanced decision support.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Mixed fleet?</div>
+        <div class="card-desc">→ Use a sequential chain: Ollama agent does initial research (free), OpenAI agent does final synthesis (paid but minimal tokens).</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     I/O EXAMPLES
+═══════════════════════════════════════════════════════════════ -->
+<section id="io">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">Input / Output</span>
+      <div class="sec-title">Concrete Examples</div>
+      <div class="sec-sub">Real-world inputs and what the system produces. Click each example to see it in detail.</div>
+    </div>
+
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.5rem;" id="io-tabs">
+      <button class="btn btn-primary" onclick="showIO(0)">Single Agent</button>
+      <button class="btn btn-ghost" onclick="showIO(1)">Sequential Chain</button>
+      <button class="btn btn-ghost" onclick="showIO(2)">Parallel Chain</button>
+      <button class="btn btn-ghost" onclick="showIO(3)">RAG Query</button>
+      <button class="btn btn-ghost" onclick="showIO(4)">Task to Node</button>
+    </div>
+
+    <div id="io-display">
+      <!-- filled by JS -->
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     USE CASES
+═══════════════════════════════════════════════════════════════ -->
+<section id="usecases">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">Real World</span>
+      <div class="sec-title">Use Cases & Scenarios</div>
+      <div class="sec-sub">Where does this architecture shine? Six production scenarios across different domains.</div>
+    </div>
+
+    <div class="usecase-grid">
+      <div class="usecase-card" style="--c1:var(--accent);--c2:var(--accent2)">
+        <div class="usecase-industry">💼 Enterprise / IT</div>
+        <div class="usecase-title">Incident Triage Automation</div>
+        <div class="usecase-scenario">Graylog fires an alert at 3am. A READ_ONLY agent fetches log context, queries the RAG knowledge base for similar past incidents, and posts a structured triage brief to Slack — before any human wakes up.</div>
+        <div class="usecase-agents">
+          <span class="usecase-agent">alert-reader (READ_ONLY)</span>
+          <span class="usecase-agent">kb-searcher (RAG)</span>
+          <span class="usecase-agent">slack-notifier</span>
+        </div>
+      </div>
+      <div class="usecase-card" style="--c1:var(--accent3);--c2:var(--accent)">
+        <div class="usecase-industry">📊 Finance / Analytics</div>
+        <div class="usecase-title">Multi-Source Financial Report</div>
+        <div class="usecase-scenario">Three parallel agents pull: (1) live stock data via http_request, (2) internal Excel forecasts via read_excel, (3) competitor PDF filings via read_pdf. A merger agent synthesizes into a board-ready Word document.</div>
+        <div class="usecase-agents">
+          <span class="usecase-agent">market-data (Web)</span>
+          <span class="usecase-agent">forecast-reader (Excel)</span>
+          <span class="usecase-agent">filing-reader (PDF)</span>
+          <span class="usecase-agent">synthesis-agent</span>
+        </div>
+      </div>
+      <div class="usecase-card" style="--c1:var(--accent5);--c2:var(--accent4)">
+        <div class="usecase-industry">🛒 E-commerce / Support</div>
+        <div class="usecase-title">Intelligent Customer Support Router</div>
+        <div class="usecase-scenario">A Router chain classifies inbound tickets and dispatches: billing questions → Finance Agent (Ollama, free), shipping questions → Ops Agent (Groq, fast), technical bugs → Engineering Agent (GPT-4o, precise).</div>
+        <div class="usecase-agents">
+          <span class="usecase-agent">router-agent</span>
+          <span class="usecase-agent">finance-agent (Ollama)</span>
+          <span class="usecase-agent">ops-agent (Groq)</span>
+          <span class="usecase-agent">eng-agent (GPT-4o)</span>
+        </div>
+      </div>
+      <div class="usecase-card" style="--c1:var(--accent2);--c2:var(--accent3)">
+        <div class="usecase-industry">📝 Legal / Compliance</div>
+        <div class="usecase-title">Contract Review Pipeline</div>
+        <div class="usecase-scenario">Upload 50 supplier contracts. Sequential chain: RAG ingestion agent indexes all PDFs → analyst agent queries for liability clauses → writer agent generates a risk summary CSV. Runs overnight, unattended.</div>
+        <div class="usecase-agents">
+          <span class="usecase-agent">ingestion-agent</span>
+          <span class="usecase-agent">analyst-agent (Claude)</span>
+          <span class="usecase-agent">writer-agent</span>
+        </div>
+      </div>
+      <div class="usecase-card" style="--c1:var(--accent4);--c2:var(--accent5)">
+        <div class="usecase-industry">🔬 Research / Science</div>
+        <div class="usecase-title">Literature Review Assistant</div>
+        <div class="usecase-scenario">Researcher uploads 200 papers as PDFs. They type a question in the chat. RAG retrieves the 5 most relevant chunks, the agent synthesizes a referenced answer with citations back to source documents.</div>
+        <div class="usecase-agents">
+          <span class="usecase-agent">rag-researcher (ChromaDB)</span>
+          <span class="usecase-agent">synthesis-agent (Claude)</span>
+        </div>
+      </div>
+      <div class="usecase-card" style="--c1:var(--accent3);--c2:var(--accent2)">
+        <div class="usecase-industry">🏭 DevOps / Automation</div>
+        <div class="usecase-title">Distributed Data Processing Farm</div>
+        <div class="usecase-scenario">5 cheap VPS nodes each run a worker with ELEVATED python execution privilege. Master queues 1000 data transformation tasks. Redis distributes them round-robin. Each node processes in parallel. Results collected centrally.</div>
+        <div class="usecase-agents">
+          <span class="usecase-agent">master (task queue)</span>
+          <span class="usecase-agent">node-1..5 (exec_python)</span>
+          <span class="usecase-agent">aggregator-agent</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     Q&A
+═══════════════════════════════════════════════════════════════ -->
+<section id="qa">
+  <div class="container">
+    <div class="sec-header">
+      <span class="sec-tag">Interview Prep</span>
+      <div class="sec-title">Q&A — Multi-Agent Systems</div>
+      <div class="sec-sub">30 questions across difficulty levels. Click any question to reveal the answer. These cover the architecture, design decisions, and technologies in this exact system.</div>
+    </div>
+
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.5rem;" id="qa-filters">
+      <button class="btn btn-primary" onclick="filterQA('all')">All (30)</button>
+      <button class="btn btn-ghost" onclick="filterQA('concept')">Concepts</button>
+      <button class="btn btn-ghost" onclick="filterQA('design')">Design</button>
+      <button class="btn btn-ghost" onclick="filterQA('tech')">Technologies</button>
+      <button class="btn btn-ghost" onclick="filterQA('tradeoff')">Trade-offs</button>
+    </div>
+
+    <div class="qa-list" id="qa-list">
+      <!-- filled by JS -->
+    </div>
+  </div>
+</section>
+
+<script>
+// ─── NAVIGATION ───
+function showSection(id) {
+  document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const tabs = document.querySelectorAll('.nav-tab');
+  tabs.forEach(t => { if(t.getAttribute('onclick').includes(`'${id}'`)) t.classList.add('active'); });
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ─── REACT LOOP ANIMATION ───
+let reactStep = 1;
+function reactNext() {
+  const steps = document.querySelectorAll('.flow-step');
+  if(reactStep < steps.length) {
+    reactStep++;
+    steps.forEach((s, i) => {
+      if(i < reactStep) s.classList.add('active');
+      else s.classList.remove('active');
+    });
+    document.getElementById('step-counter').textContent = `Step ${reactStep}/${steps.length}`;
+    if(reactStep === steps.length) {
+      document.getElementById('react-note').textContent = '✅ Loop complete — final answer ready to stream.';
+    }
+  }
+}
+function reactReset() {
+  reactStep = 1;
+  const steps = document.querySelectorAll('.flow-step');
+  steps.forEach((s, i) => { if(i===0) s.classList.add('active'); else s.classList.remove('active'); });
+  document.getElementById('step-counter').textContent = 'Step 1/7';
+  document.getElementById('react-note').textContent = '';
+}
+
+// ─── SECURITY ANIMATION ───
+let securityRevealed = false;
+function revealSecurity() {
+  const layers = document.querySelectorAll('.sec-layer');
+  layers.forEach((l, i) => {
+    const delay = parseInt(l.dataset.delay) || 0;
+    setTimeout(() => l.classList.add('revealed'), delay);
+  });
+}
+function resetSecurity() {
+  document.querySelectorAll('.sec-layer').forEach(l => l.classList.remove('revealed'));
+}
+
+// ─── RAG DETAIL ───
+const ragDetails = [
+  {
+    title: '📎 File Ingestion',
+    content: `The ingestion module supports multiple file formats:
+    
+• PDF → pypdf extracts text page by page
+• DOCX → python-docx walks paragraphs and tables  
+• XLSX → openpyxl reads cell values row by row
+• TXT / MD / CSV / JSON / YAML → plain text read
+
+Input: raw file bytes (uploaded via React UI or placed server-side)
+Output: raw_text string, ready for chunking`,
+    code: `# Simplified ingestion logic
+def ingest_file(path: str) -> str:
+    ext = Path(path).suffix.lower()
+    if ext == '.pdf':
+        return extract_pdf(path)   # pypdf
+    elif ext == '.docx':
+        return extract_docx(path)  # python-docx
+    elif ext == '.xlsx':
+        return extract_xlsx(path)  # openpyxl
+    else:
+        return Path(path).read_text()`
+  },
+  {
+    title: '✂️ Text Chunking',
+    content: `Raw text is split into overlapping chunks before embedding.
+
+Why overlap? If a key sentence straddles a chunk boundary, it would be split across two chunks and might not appear in search results. 200-char overlap guarantees boundary sentences are fully captured.
+
+• Chunk size: 1000 chars — large enough for context, small enough for precision
+• Overlap: 200 chars — captures boundary content
+• Result: list of chunk strings with start/end positions`,
+    code: `def chunk_text(text: str, 
+               size=1000, overlap=200) -> list[str]:
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = start + size
+        chunks.append(text[start:end])
+        start += size - overlap  # slide with overlap
+    return chunks`
+  },
+  {
+    title: '🔢 Embedding & Indexing',
+    content: `Chunks are embedded (converted to vectors) and stored in ChromaDB.
+
+• Embedding model: ChromaDB's default (sentence-transformers)
+• Similarity metric: cosine similarity
+• Storage: persistent, ./data/chroma/ directory
+• Each chunk stored with: vector, raw text, metadata (filename, chunk_id)
+
+This is done ONCE at upload time. The index persists across restarts.`,
+    code: `# ChromaDB collection setup
+client = chromadb.PersistentClient(path=CHROMA_DIR)
+collection = client.get_or_create_collection(
+    name="knowledge_base",
+    metadata={"hnsw:space": "cosine"}
+)
+
+# Add chunks
+collection.add(
+    documents=chunks,
+    ids=[f"{doc_id}_{i}" for i, _ in enumerate(chunks)]
+)`
+  },
+  {
+    title: '🔍 Similarity Retrieval',
+    content: `At agent query time, the tool query_knowledge_base is called.
+
+1. The agent's query string is embedded (same model as ingestion)
+2. ChromaDB computes cosine similarity against all stored vectors
+3. Top-N most similar chunks are returned with their scores
+4. Chunks with score < threshold can be filtered out
+
+Input: query string (from agent's reasoning)
+Output: list of {text, score, metadata} dicts`,
+    code: `def query_knowledge_base(query: str, n: int = 5):
+    results = collection.query(
+        query_texts=[query],
+        n_results=n
+    )
+    return [
+        {"text": doc, "score": dist, "source": meta}
+        for doc, dist, meta in zip(
+            results["documents"][0],
+            results["distances"][0],
+            results["metadatas"][0]
+        )
+    ]`
+  },
+  {
+    title: '💬 Context Injection',
+    content: `Retrieved chunks are injected into the agent's system prompt before the LLM is called.
+
+The agent doesn't "know" the documents in advance. It receives the relevant chunks dynamically per query. This is the core of RAG — retrieval then generation.
+
+Format in system prompt:
+  --- KNOWLEDGE BASE CONTEXT ---
+  [chunk 1 text]  (score: 0.92)
+  [chunk 2 text]  (score: 0.87)
+  ...use the above context to answer.`,
+    code: `# Context injection in agent.py
+kb_results = query_knowledge_base(user_query, n=5)
+context = "\\n---\\n".join(
+    [r["text"] for r in kb_results]
+)
+system_prompt = f"""You are a helpful assistant.
+Use this context to answer:
+{context}
+"""
+# This enriched prompt is sent to the LLM`
+  }
+];
+
+function expandRag(idx) {
+  const d = ragDetails[idx];
+  document.getElementById('rag-detail').innerHTML = `
+    <div style="font-size:.9rem;font-weight:700;margin-bottom:.75rem;color:var(--accent3);">${d.title}</div>
+    <div style="font-size:.8rem;color:var(--muted);line-height:1.7;white-space:pre-wrap;margin-bottom:.75rem;">${d.content}</div>
+    <div style="padding:.7rem .85rem;background:var(--bg);border-radius:6px;border:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--accent3);white-space:pre-wrap;line-height:1.4;">${d.code}</div>
+  `;
+}
+
+// ─── I/O EXAMPLES ───
+const ioExamples = [
+  {
+    title: 'Single Agent — File Analysis',
+    input: `{
+  <span class="key">"agent"</span>: <span class="str">"analyst"</span>,
+  <span class="key">"task"</span>: <span class="str">"Summarize the key metrics 
+          from sales_q3.xlsx"</span>,
+  <span class="key">"session_id"</span>: <span class="str">"ws-abc123"</span>
+}`,
+    output: `<span class="comment">// Agent reasons → calls read_excel → LLM synthesizes</span>
+
+{
+  <span class="key">"status"</span>: <span class="str">"complete"</span>,
+  <span class="key">"answer"</span>: <span class="str">"Q3 total revenue: €4.2M (+18% YoY).
+Top product: Widget X (€1.1M, 26% share).
+Weakest region: North (€380K, -3% QoQ).
+Recommendation: reallocate budget from North to expanding Widget X margin."</span>,
+  <span class="key">"tool_calls"</span>: [<span class="str">"read_excel"</span>],
+  <span class="key">"iterations"</span>: <span class="val">2</span>
+}`
+  },
+  {
+    title: 'Sequential Chain — Research → Write → Review',
+    input: `{
+  <span class="key">"chain"</span>: <span class="str">"research_write_review"</span>,
+  <span class="key">"chain_type"</span>: <span class="str">"sequential"</span>,
+  <span class="key">"input"</span>: <span class="str">"Write a competitive analysis 
+       of the top 3 cloud providers"</span>
+}`,
+    output: `<span class="comment">// Agent A: fetches web pages → extracts data
+// Agent B: receives A's output → drafts report  
+// Agent C: receives B's draft → edits + scores</span>
+
+{
+  <span class="key">"chain_output"</span>: <span class="str">"[Full 800-word competitive analysis]"</span>,
+  <span class="key">"agents_used"</span>: [<span class="str">"researcher"</span>, <span class="str">"writer"</span>, <span class="str">"reviewer"</span>],
+  <span class="key">"total_tool_calls"</span>: <span class="val">7</span>,
+  <span class="key">"quality_score"</span>: <span class="val">0.91</span>
+}`
+  },
+  {
+    title: 'Parallel Chain — Multi-Perspective Analysis',
+    input: `{
+  <span class="key">"chain"</span>: <span class="str">"multi_analyst"</span>,
+  <span class="key">"chain_type"</span>: <span class="str">"parallel"</span>,
+  <span class="key">"input"</span>: <span class="str">"Evaluate acquiring CompanyX"</span>,
+  <span class="key">"agents"</span>: [<span class="str">"financial"</span>, <span class="str">"legal"</span>, <span class="str">"technical"</span>]
+}`,
+    output: `<span class="comment">// All 3 agents run SIMULTANEOUSLY
+// MergeAgent synthesizes after all complete</span>
+
+{
+  <span class="key">"financial_view"</span>: <span class="str">"P/E ratio favorable, FCF positive..."</span>,
+  <span class="key">"legal_view"</span>: <span class="str">"2 open IP disputes, minor exposure..."</span>,
+  <span class="key">"technical_view"</span>: <span class="str">"Tech stack compatible, 60-day migration..."</span>,
+  <span class="key">"merged_recommendation"</span>: <span class="str">"Proceed — low risk, 18mo ROI"</span>,
+  <span class="key">"latency_vs_sequential"</span>: <span class="str">"3× faster"</span>
+}`
+  },
+  {
+    title: 'RAG Knowledge Base Query',
+    input: `<span class="comment">// Tool call from inside agent ReAct loop</span>
+{
+  <span class="key">"tool"</span>: <span class="str">"query_knowledge_base"</span>,
+  <span class="key">"args"</span>: {
+    <span class="key">"query"</span>: <span class="str">"refund policy for enterprise customers"</span>,
+    <span class="key">"n"</span>: <span class="val">3</span>
+  }
+}`,
+    output: `{
+  <span class="key">"results"</span>: [
+    {
+      <span class="key">"text"</span>: <span class="str">"Enterprise customers are eligible for 
+full refunds within 90 days of purchase..."</span>,
+      <span class="key">"score"</span>: <span class="val">0.94</span>,
+      <span class="key">"source"</span>: <span class="str">"enterprise_policy_v3.pdf · page 12"</span>
+    },
+    {
+      <span class="key">"text"</span>: <span class="str">"Partial refunds apply after 90 days 
+on a pro-rata basis..."</span>,
+      <span class="key">"score"</span>: <span class="val">0.87</span>,
+      <span class="key">"source"</span>: <span class="str">"enterprise_policy_v3.pdf · page 13"</span>
+    }
+  ]
+}`
+  },
+  {
+    title: 'Task Dispatch to Distributed Node',
+    input: `<span class="comment">// Master → Redis → Node worker</span>
+<span class="comment">// Channel: tasks:node-gpu-1</span>
+{
+  <span class="key">"task_id"</span>: <span class="str">"task-789"</span>,
+  <span class="key">"agent"</span>: <span class="str">"data-processor"</span>,
+  <span class="key">"input"</span>: <span class="str">"Process batch_july.csv"</span>,
+  <span class="key">"target_node"</span>: <span class="str">"node-gpu-1"</span>
+}`,
+    output: `<span class="comment">// Node executes → publishes to results channel
+// Master WebSocket streams to React UI</span>
+
+{
+  <span class="key">"task_id"</span>: <span class="str">"task-789"</span>,
+  <span class="key">"node"</span>: <span class="str">"node-gpu-1"</span>,
+  <span class="key">"status"</span>: <span class="str">"complete"</span>,
+  <span class="key">"result"</span>: <span class="str">"Processed 14,203 rows. 
+  Anomalies: 3. Output: batch_july_processed.csv"</span>,
+  <span class="key">"duration_ms"</span>: <span class="val">4312</span>
+}`
+  }
+];
+
+let currentIO = 0;
+function showIO(idx) {
+  currentIO = idx;
+  const ex = ioExamples[idx];
+  document.getElementById('io-display').innerHTML = `
+    <div style="margin-bottom:.75rem;font-size:.88rem;font-weight:700;color:var(--text);">${ex.title}</div>
+    <div class="io-container">
+      <div class="io-box">
+        <div class="io-label input">INPUT</div>
+        <div class="io-content">${ex.input}</div>
+      </div>
+      <div class="io-box">
+        <div class="io-label output">OUTPUT</div>
+        <div class="io-content">${ex.output}</div>
+      </div>
+    </div>
+  `;
+  document.querySelectorAll('#io-tabs .btn').forEach((b,i) => {
+    b.className = i===idx ? 'btn btn-primary' : 'btn btn-ghost';
+  });
+}
+showIO(0);
+
+// ─── Q&A DATA ───
+const qaData = [
+  {q:"What is the ReAct pattern and why is it used here?", cat:"concept", diff:"easy", a:"ReAct (Reason + Act) is an agent paradigm where the LLM alternates between thinking (producing reasoning text) and acting (calling a tool). After each tool call, the result is added to memory and the LLM reasons again. This loop continues until the LLM produces a final answer with no tool calls. It's used here because it allows agents to solve multi-step tasks that require gathering information dynamically — a single LLM call couldn't read a file AND reason about it.", code:`# ReAct loop pseudocode
+while iterations < max_iterations:
+    response = llm.call(memory.get())
+    if response.has_tool_call:
+        result = tools.execute(response.tool_call)
+        memory.add("tool", result)
+    else:
+        return response.text  # final answer`},
+  {q:"Why Redis pub/sub instead of a REST API for node communication?", cat:"design", diff:"med", a:"REST is request-response — the master would need to know each node's IP, handle timeouts, retry logic, etc. Redis pub/sub is fire-and-forget: the master publishes a task to a channel, any subscribed node picks it up. This decouples master from nodes (nodes can come and go), enables broadcast (any node can pick up), and Redis handles delivery. The tradeoff: you lose direct acknowledgment — results come back on a separate results channel.", code:`# Master publishes task
+await redis.publish(f"tasks:{node_id}", json.dumps(task))
+
+# Node subscribes and handles
+async for message in pubsub.listen():
+    task = json.loads(message['data'])
+    result = await orchestrator.execute(task)
+    await redis.publish("results", json.dumps(result))`},
+  {q:"What is RAG and how does it differ from fine-tuning?", cat:"concept", diff:"easy", a:"RAG = Retrieval-Augmented Generation. At query time, relevant document chunks are retrieved from a vector database and injected into the LLM's context. The LLM generates its answer using this retrieved context. Fine-tuning bakes knowledge into model weights through training. RAG is preferable when: knowledge changes frequently (upload new files, no retraining), you need transparency (you can see which chunks influenced the answer), or cost is a concern (no GPU training required)."},
+  {q:"Why 1000-char chunks with 200-char overlap?", cat:"design", diff:"med", a:"Chunk size is a precision-recall tradeoff. Too small: chunks lack context, retrieved chunks are uninformative. Too large: too much irrelevant text in each chunk, similarity scores become noisy. 1000 chars ≈ 150-200 words — enough for a coherent paragraph. The 200-char overlap ensures that a key sentence split across a boundary still appears fully in at least one chunk. These are pragmatic defaults that work well for business documents."},
+  {q:"How does the path sandbox prevent directory traversal?", cat:"tech", diff:"med", a:"The sandbox calls os.path.realpath() on the requested path to resolve all symlinks and relative components (like ../). Then it checks whether the resolved absolute path starts with any of the ALLOWED_DIRS prefixes. A path like workspace/../../etc/passwd resolves to /etc/passwd, which doesn't start with workspace/ — so it's rejected. This prevents both relative traversal and symlink attacks.", code:`def check_path(path: str) -> str:
+    resolved = os.path.realpath(path)
+    for allowed in ALLOWED_DIRS:
+        if resolved.startswith(os.path.realpath(allowed)):
+            return resolved
+    raise PermissionError(f"Path outside sandbox: {path}")`},
+  {q:"Why HMAC constant-time comparison for API keys?", cat:"tech", diff:"hard", a:"Standard string comparison (==) short-circuits as soon as it finds a mismatch, returning faster for strings that differ early. An attacker can time thousands of requests to measure how many characters match — gradually brute-forcing the key. HMAC's compare_digest() always compares all bytes in constant time regardless of where the mismatch occurs. This removes the timing side-channel.", code:`import hmac
+# SECURE: constant time
+if not hmac.compare_digest(provided_key, expected_key):
+    raise HTTPException(401)
+
+# INSECURE: timing side-channel
+if provided_key != expected_key:  # DON'T USE THIS
+    raise HTTPException(401)`},
+  {q:"When would you use a Sequential vs Parallel chain?", cat:"design", diff:"easy", a:"Sequential: when each step depends on the previous step's output. Example: Researcher gathers facts → Writer drafts using those facts → Reviewer edits the draft. Each agent adds value to what came before. Parallel: when steps are independent and can run simultaneously to reduce latency. Example: Three analysts each study a different aspect of the same problem, then a merger agent combines. Router: when you need to dispatch different inputs to different specialists based on classification."},
+  {q:"How does the sliding window memory work and what are its tradeoffs?", cat:"concept", diff:"med", a:"The sliding window keeps only the last N messages in context. When the window fills, the oldest message is dropped. Benefit: bounded token cost regardless of conversation length. Tradeoff: the agent loses access to early context. For most tasks this is acceptable — recent context is most relevant. For tasks requiring long-term memory, you'd supplement with RAG: store the full conversation history in ChromaDB and retrieve relevant turns as needed."},
+  {q:"How would you scale this system to handle 1000 concurrent users?", cat:"design", diff:"hard", a:"The architecture is already horizontally scalable. For 1000 concurrent users: (1) Scale nodes horizontally — add more node workers, Redis distributes tasks automatically. (2) Scale the master — run multiple FastAPI instances behind a load balancer (e.g. nginx), share Redis and ChromaDB via network. (3) Redis itself can be clustered for high throughput. (4) Use model batching on Groq/OpenAI to amortize API latency. The WebSocket manager would need external pub/sub (Redis Streams) to work across multiple master instances."},
+  {q:"What happens if a node goes offline mid-task?", cat:"design", diff:"hard", a:"In the current architecture, a task that's been picked up by a node but not yet responded to will time out on the master side (WebSocket timeout or explicit task timeout). The master can detect the node going offline via heartbeat absence (if implemented). For full fault tolerance you'd add: task acknowledgment (node publishes 'accepted' before starting), dead-letter queues (timed-out tasks requeue), and idempotent task IDs (safe to re-execute). Redis Streams offer consumer groups with acknowledgment, which is an upgrade path over basic pub/sub."},
+  {q:"What is ChromaDB and why use it over PostgreSQL with pgvector?", cat:"tech", diff:"med", a:"ChromaDB is an embedded vector database — it runs in-process, stores data to disk, and requires no separate server. For this system's use case (per-node RAG, moderate document volumes), embedded is simpler: no connection management, no network latency, easy Docker setup. pgvector is better when you need: SQL joins between vector search and relational data, ACID transactions, existing Postgres infrastructure, or very large scale (billions of vectors). ChromaDB is the right tradeoff here."},
+  {q:"How does secret redaction work and what patterns does it catch?", cat:"tech", diff:"med", a:"The redactor applies regex patterns to LLM output before it's returned. Common patterns include: OpenAI key format (sk-[a-zA-Z0-9]{48}), AWS access keys (AKIA[0-9A-Z]{16}), generic API key patterns (api_key\\s*=\\s*[\\S]+), bearer tokens. The concern is that LLMs can echo back secrets from their context — if an agent reads a config file that contains a DB password, the LLM might include it in its reasoning output. Redaction ensures the secret never reaches the client.", code:`# Redaction patterns
+PATTERNS = [
+    r'sk-[a-zA-Z0-9]{48}',     # OpenAI
+    r'AKIA[0-9A-Z]{16}',       # AWS
+    r'(?i)api.?key\\s*[=:]\\s*\\S+',
+    r'Bearer\\s+[A-Za-z0-9._-]+'
+]
+def redact(text: str) -> str:
+    for p in PATTERNS:
+        text = re.sub(p, '[REDACTED]', text)
+    return text`},
+  {q:"Why FastAPI over Flask or Django for this system?", cat:"tech", diff:"easy", a:"FastAPI is async-native (ASGI), which is critical here: WebSocket handling, Redis pub/sub listening, and LLM API calls are all I/O-bound operations. Flask is synchronous by default — each WebSocket connection would block a thread. FastAPI uses Python's asyncio for true concurrent I/O. Additionally: automatic OpenAPI docs, Pydantic validation, and modern Python type hints. Django is too heavyweight for an API-only service with no ORM requirements."},
+  {q:"How does the system handle LLM provider failures?", cat:"design", diff:"hard", a:"The base architecture relies on provider SDKs' built-in retry logic. A robust extension would add: (1) Circuit breakers per provider (if OpenAI fails 3 times in 60s, fall back to Groq), (2) Provider health checks before agent assignment, (3) Dead-letter tasks with reason codes, (4) Admin notifications via webhook. The per-agent provider config makes this graceful — you can update agents.yaml to reroute a chain from a failing provider to a backup without code changes."},
+  {q:"What is the difference between WebSocket and SSE in this system?", cat:"tech", diff:"easy", a:"WebSocket: full-duplex, bidirectional. Used for the chat interface — client sends a message, server streams tokens back in real-time. Each session gets its own /ws/{session_id} connection. SSE (Server-Sent Events): server-to-client only, simpler. Used for streaming task progress updates to the UI. WebSocket is used where the client also needs to send data; SSE where it's purely server-push. The React frontend uses both — WebSocket for interactive chat, SSE for passive status streams."},
+  {q:"How are agents defined and what's in agents.yaml?", cat:"tech", diff:"easy", a:"agents.yaml is declarative config describing every agent: name, provider (ollama/openai/anthropic/groq), model (e.g. llama3.2), system_prompt (the agent's persona and instructions), tools (list of tool names from the registry), privilege (0-3), and chain membership. The orchestrator reads this at node startup. Adding a new agent = adding a YAML block + restarting. No Python code changes needed.", code:`# agents.yaml example
+agents:
+  - name: researcher
+    provider: groq
+    model: llama3-70b-8192
+    privilege: 1
+    tools: [fetch_webpage, read_file, query_knowledge_base]
+    system_prompt: "You are a research agent..."
+    chains: [research_write_review]`},
+  {q:"What's the difference between READ_ONLY and STANDARD privilege?", cat:"concept", diff:"easy", a:"READ_ONLY (level 0): can only read — files, web pages, Excel, Word, PDF, CSV, knowledge base. No mutations. Safe to expose to untrusted or external inputs. STANDARD (level 1): adds write capabilities — write_file, http_request (POST/PUT), write_excel, write_word, write_csv. Still no code execution. Appropriate for productivity agents that need to produce file outputs. The key principle: assign the minimum privilege the agent needs to do its job."},
+  {q:"How would you add a new tool to this system?", cat:"design", diff:"med", a:"Three steps: (1) Create the tool function in core/tools/ — it should accept a dict of args and return a string result. (2) Register it in the tool registry with its name, description, argument schema, and min_privilege. (3) Add it to the relevant agent's tools list in agents.yaml. The registry is a dict the agent queries at runtime — if a tool name is registered and the agent's privilege ≥ min_privilege, the agent can call it.", code:`# core/tools/registry.py
+TOOLS = {
+    "my_new_tool": {
+        "func": my_new_tool_func,
+        "description": "Does X given Y",
+        "args": {"input": "string"},
+        "min_privilege": Privilege.STANDARD
+    }
+}`},
+  {q:"What is the Orchestrator's role vs the Agent's role?", cat:"concept", diff:"med", a:"The Agent handles the ReAct loop for a single task: memory, LLM calls, tool dispatch, iteration. The Orchestrator manages multiple agents and chains: it receives a task from Redis, decides which agent or chain to invoke based on config, coordinates parallel execution (waits for all parallel agents to finish before calling the merge agent), and returns the final result to publish. Think of Agent = a single worker, Orchestrator = the team manager."},
+  {q:"Why use Docker Compose for local development?", cat:"tech", diff:"easy", a:"Docker Compose starts the full stack (Redis, Ollama, Master server, Node worker) with one command: docker-compose up. This eliminates 'works on my machine' problems — all services run in isolated containers with defined networking. For this system: Redis must be up before nodes start, Ollama must be reachable at a known URL, the master must know the Redis URL. Compose handles service startup ordering and inter-service DNS automatically."},
+  {q:"How does the WebSocket Manager handle multiple concurrent chat sessions?", cat:"tech", diff:"hard", a:"The WebSocket Manager maintains a dict mapping session_id → WebSocket connection. When a user connects, their session is registered. Messages from Redis results channel are routed to the correct session by looking up the task's original session_id. If a session disconnects, it's removed from the dict. For multi-instance deployments, this breaks (two FastAPI instances have separate dicts) — the fix is to use Redis pub/sub to relay results to all master instances, letting each check its local session registry."},
+  {q:"What are the tradeoffs of per-node ChromaDB vs a shared vector store?", cat:"tradeoff", diff:"hard", a:"Per-node ChromaDB (current): simple setup, no network latency for RAG queries, each node manages its own knowledge. Tradeoff: knowledge must be replicated to each node, and a document uploaded from the UI only reaches one node unless you broadcast. Shared vector store (e.g. Weaviate, Qdrant): single source of truth, centralized updates, but adds network latency per RAG query and a new infrastructure dependency. For small-medium deployments, per-node is fine. At scale, shared vector store is worth it."},
+  {q:"How does token-bucket rate limiting work?", cat:"tech", diff:"med", a:"A token bucket starts with N tokens (the burst capacity). Each request consumes one token. Tokens refill at a fixed rate (e.g. 1 token/second). If the bucket is empty, the request is rejected (429). This allows short bursts above the average rate (up to N rapid requests), while enforcing a long-term average. Compared to fixed windows: no 'cliff' effect at window reset where a client can burst 2× the limit in two consecutive windows.", code:`class TokenBucket:
+    def __init__(self, rate=60, capacity=60):
+        self.tokens = capacity
+        self.rate = rate  # tokens/second
+        self.last_refill = time.time()
+    
+    def consume(self) -> bool:
+        self._refill()
+        if self.tokens >= 1:
+            self.tokens -= 1
+            return True  # allowed
+        return False  # rate limited`},
+  {q:"What's the purpose of the system_prompt in an agent config?", cat:"concept", diff:"easy", a:"The system prompt is injected at the start of every LLM call as the 'system' role message. It defines the agent's persona, capabilities, constraints, and output format. Examples: 'You are a financial analyst. Always cite your sources. Return analysis in structured JSON.' or 'You are a code reviewer. Be concise. Flag security issues with HIGH/MED/LOW severity.' Different system prompts on the same underlying model produce very different behavior — it's how agents specialize."},
+  {q:"How would you add streaming token-by-token output to the UI?", cat:"design", diff:"med", a:"FastAPI + WebSocket already supports streaming. The LLM providers (OpenAI, Anthropic, Groq) all have streaming APIs that yield token chunks. In the agent's LLM call, use stream=True — instead of waiting for the full response, iterate over chunks and immediately publish each chunk to the WebSocket. The React frontend receives tokens and appends them to the chat display in real-time. Ollama also supports streaming via its /api/generate endpoint with stream=true."},
+  {q:"Why support multiple LLM providers instead of just OpenAI?", cat:"tradeoff", diff:"easy", a:"Cost: Ollama is free (local inference), Groq has a generous free tier. Flexibility: different models excel at different tasks — code (CodeLlama), reasoning (GPT-4o), long context (Claude). Privacy: sensitive tasks stay on local Ollama with no data leaving the network. Vendor lock-in: if OpenAI has an outage or changes pricing, you can route to Groq or Anthropic with a config change. Experimentation: run the same chain with different providers to compare quality/cost."},
+  {q:"What happens to the memory between different tasks?", cat:"concept", diff:"easy", a:"Memory is per-session and per-task. Each chat session (WebSocket connection) has its own memory object. When a new task starts in a session, the memory carries forward the conversation history (up to the window size). When the session ends (WebSocket disconnects), the memory is discarded — it's in-process state, not persisted. For persistent cross-session memory, you'd store the conversation history in Redis or a database and reload it when the session reconnects."},
+  {q:"How does the Router chain decide which agent to dispatch to?", cat:"concept", diff:"med", a:"The Router agent is an LLM call itself. It receives the user input and a description of each available downstream agent. The LLM reasons about which agent is most appropriate and outputs the agent name to route to. This is structured output: the router is prompted to respond with exactly the target agent name in a parseable format. The chain then executes that agent with the original input. It's LLM-as-classifier — flexible but non-deterministic, unlike rule-based routing.", code:`# Router prompt
+system = """You are a routing agent. Given a user query, 
+output ONLY the name of the best agent to handle it.
+Available agents:
+- finance_agent: billing, payments, refunds
+- tech_agent: bugs, code, API questions  
+- legal_agent: contracts, compliance
+"""
+# Output: "tech_agent"
+target = llm.call(system, user_query).strip()`},
+  {q:"What security risks remain in this architecture?", cat:"tradeoff", diff:"hard", a:"1. Prompt injection: a malicious user could craft inputs that override the agent's system prompt behavior. Mitigation: input sanitization, output validation. 2. execute_python/shell: even sandboxed, code execution is inherently risky. Consider containerizing each tool execution. 3. Ollama: local model output is not filtered by provider safety systems — a fine-tuned jailbreak model could be loaded. 4. Knowledge base poisoning: uploaded documents could contain adversarial text designed to manipulate agent responses. 5. Redis: no auth in default config — use requirepass in production."},
+  {q:"What is the role of the Dockerfile.master vs Dockerfile.node?", cat:"tech", diff:"easy", a:"Dockerfile.master builds the control plane image: FastAPI server + React frontend bundle. It exposes port 8000 and contains the master/api code + static frontend files. Dockerfile.node builds the worker image: just the node/worker.py code and core/ framework. It connects outward to Redis and LLM providers but doesn't expose any ports itself. Separating them allows independent scaling (3 masters, 10 nodes) and independent updates (update agents without touching the UI)."},
+  {q:"How would you monitor this system in production?", cat:"design", diff:"hard", a:"Key metrics to expose: (1) Task queue depth per node (Redis LLEN), (2) Agent latency per provider (LLM call duration histogram), (3) Tool call counts and error rates, (4) Memory window utilization, (5) Node health (heartbeat last-seen). Tooling: expose /metrics endpoint in FastAPI (Prometheus format), instrument with OpenTelemetry spans per agent iteration, ship logs to a central store (Loki, Elasticsearch). Alerts: queue depth > N (node overloaded), provider error rate > threshold, node offline."}
+];
+
+let qaFilter = 'all';
+function filterQA(cat) {
+  qaFilter = cat;
+  renderQA();
+  document.querySelectorAll('#qa-filters .btn').forEach(b => {
+    b.className = b.getAttribute('onclick').includes(`'${cat}'`) ? 'btn btn-primary' : 'btn btn-ghost';
+  });
+}
+
+function renderQA() {
+  const filtered = qaFilter === 'all' ? qaData : qaData.filter(q => q.cat === qaFilter);
+  const html = filtered.map((item, i) => `
+    <div class="qa-item" id="qa-${i}">
+      <div class="qa-q" onclick="toggleQA('qa-${i}')">
+        <div style="display:flex;gap:.6rem;align-items:center;flex:1;">
+          <span class="qa-cat">[${item.cat}]</span>
+          <span>${item.q}</span>
+        </div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-shrink:0;">
+          <span class="qa-difficulty diff-${item.diff === 'easy' ? 'easy' : item.diff === 'med' ? 'med' : 'hard'}">${item.diff}</span>
+          <span class="qa-chevron">▼</span>
+        </div>
+      </div>
+      <div class="qa-a">
+        <div class="qa-a-inner">
+          <div class="qa-a-text">${item.a}</div>
+          ${item.code ? `<div class="qa-a-code">${item.code}</div>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('qa-list').innerHTML = html;
+}
+
+function toggleQA(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('open');
+}
+
+renderQA();
+</script>
+</body>
+</html>
